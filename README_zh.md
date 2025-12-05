@@ -56,7 +56,7 @@ Candy-S3 是一个统一的SDK，用于与多种云服务提供商的S3兼容对
 <dependency>
     <groupId>io.github.matian2014</groupId>
     <artifactId>candy-s3</artifactId>
-    <version>[最新版本]</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 

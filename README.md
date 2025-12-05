@@ -61,7 +61,7 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.matian2014</groupId>
     <artifactId>candy-s3</artifactId>
-    <version>[latest version]</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
