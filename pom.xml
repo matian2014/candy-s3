@@ -6,7 +6,7 @@
 
     <groupId>io.github.matian2014</groupId>
     <artifactId>candy-s3</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Candy S3</name>
