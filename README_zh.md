@@ -76,8 +76,8 @@ client.setSecretKey("your-secret-key");
 client.setRegion("us-east-1");
 ```
 
-> 有部分云服务商的S3服务需要额外的参数
-> 如Cloudflare R2需要指定`account-id`，可以在初始化客户端时通过`setCloudflareR2AccountId`方法设置
+> 有部分云服务商的S3服务需要额外的参数，
+> 如Cloudflare R2需要指定`account-id`，可以在初始化客户端时通过`setCloudflareR2AccountId`方法设置。
 > 你可以参考单元测试代码 `src/test/java/io/github/matian2014/candys3/CandyS3Test.java` 中的示例，了解如何在不同云服务商的S3服务中使用Candy-S3。
 
 #### 存储桶操作

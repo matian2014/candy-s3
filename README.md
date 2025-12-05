@@ -83,9 +83,9 @@ client.setSecretKey("your-secret-key");
 client.setRegion("us-east-1");
 ```
 
-> Some cloud providers' S3 services require additional parameters
+> Some cloud providers' S3 services require additional parameters.
 > For example, Cloudflare R2 requires specifying `account-id`, which can be set through the `setCloudflareR2AccountId`
-> method when initializing the client
+> method when initializing the client.
 > You can refer to the example in the unit test code `src/test/java/io/github/matian2014/candys3/CandyS3Test.java` to understand
 > how to use Candy-S3 with different cloud providers' S3 services.
 
