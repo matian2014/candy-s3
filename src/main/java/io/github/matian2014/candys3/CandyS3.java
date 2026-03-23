@@ -13,17 +13,18 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import io.github.matian2014.candys3.options.*;
 import io.github.matian2014.candys3.signer.*;
-import okhttp3.*;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 public class CandyS3 {
@@ -78,7 +79,7 @@ public class CandyS3 {
     protected String cloudflareR2AccountId;
 
     protected final XmlMapper xmlMapper;
-    protected final OkHttpClient okHttpClient;
+    protected final HttpClientAdapter okHttpClient;
 
     /**
      * The default chunk size for multipart uploads, in bytes.
@@ -88,7 +89,7 @@ public class CandyS3 {
     public CandyS3(S3Provider provider) {
         this.provider = provider;
         this.xmlMapper = XmlMapper.xmlBuilder().build();
-        this.okHttpClient = new OkHttpClient().newBuilder().build();
+        this.okHttpClient = new HttpClientAdapter().newBuilder().build();
     }
 
     public S3Provider getProvider() {
@@ -3456,6 +3457,383 @@ public class CandyS3 {
         }
 
         s3Object.setServerSideEncryptionConfiguration(sseProperties);
+    }
+
+    private static class HttpClientAdapter {
+        Builder newBuilder() {
+            return new Builder();
+        }
+
+        Call newCall(Request request) {
+            return new Call(request);
+        }
+
+        private static class Builder {
+            HttpClientAdapter build() {
+                return new HttpClientAdapter();
+            }
+        }
+    }
+
+    private static class Request {
+        private final URL url;
+        private final String method;
+        private final Map<String, String> headers;
+        private final RequestBody body;
+
+        private Request(URL url, String method, Map<String, String> headers, RequestBody body) {
+            this.url = url;
+            this.method = method;
+            this.headers = headers;
+            this.body = body;
+        }
+
+        private static class Builder {
+            private URL url;
+            private String method = HttpConstants.HTTP_METHOD_GET;
+            private final Map<String, String> headers = new LinkedHashMap<String, String>();
+            private RequestBody body;
+
+            Builder url(URL url) {
+                this.url = url;
+                return this;
+            }
+
+            Builder addHeader(String key, String value) {
+                headers.put(key, value);
+                return this;
+            }
+
+            Builder get() {
+                method = HttpConstants.HTTP_METHOD_GET;
+                body = null;
+                return this;
+            }
+
+            Builder head() {
+                method = HttpConstants.HTTP_METHOD_HEAD;
+                body = null;
+                return this;
+            }
+
+            Builder delete() {
+                method = HttpConstants.HTTP_METHOD_DELETE;
+                body = null;
+                return this;
+            }
+
+            Builder put(RequestBody body) {
+                method = HttpConstants.HTTP_METHOD_PUT;
+                this.body = body;
+                return this;
+            }
+
+            Builder post(RequestBody body) {
+                method = HttpConstants.HTTP_METHOD_POST;
+                this.body = body;
+                return this;
+            }
+
+            Request build() {
+                return new Request(url, method, new LinkedHashMap<String, String>(headers), body);
+            }
+        }
+    }
+
+    private static class MediaType {
+        private final String value;
+
+        private MediaType(String value) {
+            this.value = value;
+        }
+
+        static MediaType get(String value) {
+            return new MediaType(value);
+        }
+    }
+
+    private static class RequestBody {
+        private final byte[] content;
+        private final MediaType mediaType;
+
+        private RequestBody(byte[] content, MediaType mediaType) {
+            this.content = content;
+            this.mediaType = mediaType;
+        }
+
+        static RequestBody create(byte[] content) {
+            return new RequestBody(content == null ? new byte[0] : content, null);
+        }
+
+        static RequestBody create(String content, MediaType mediaType) {
+            return new RequestBody(content == null ? new byte[0] : content.getBytes(StandardCharsets.UTF_8), mediaType);
+        }
+    }
+
+    private static class Timeout {
+        private long timeoutMillis = 0;
+
+        Timeout timeout(long timeout, TimeUnit unit) {
+            timeoutMillis = timeout <= 0 ? 0 : unit.toMillis(timeout);
+            return this;
+        }
+    }
+
+    private static class Call {
+        private final Request request;
+        private final Timeout timeout = new Timeout();
+
+        private Call(Request request) {
+            this.request = request;
+        }
+
+        Timeout timeout() {
+            return timeout;
+        }
+
+        Response execute() throws IOException {
+            HttpURLConnection connection = (HttpURLConnection) request.url.openConnection();
+            try {
+                connection.setRequestMethod(request.method);
+                connection.setUseCaches(false);
+                connection.setDoInput(true);
+                connection.setInstanceFollowRedirects(false);
+
+                if (timeout.timeoutMillis > 0) {
+                    int timeoutMs = timeout.timeoutMillis > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeout.timeoutMillis;
+                    connection.setConnectTimeout(timeoutMs);
+                    connection.setReadTimeout(timeoutMs);
+                } else {
+                    connection.setConnectTimeout(0);
+                    connection.setReadTimeout(0);
+                }
+
+                for (Map.Entry<String, String> header : request.headers.entrySet()) {
+                    connection.setRequestProperty(header.getKey(), header.getValue());
+                }
+
+                if (request.body != null) {
+                    if (request.body.mediaType != null && !containsHeader(request.headers, "Content-Type")) {
+                        connection.setRequestProperty("Content-Type", request.body.mediaType.value);
+                    }
+                    connection.setDoOutput(true);
+                    byte[] bodyContent = request.body.content == null ? new byte[0] : request.body.content;
+                    connection.setFixedLengthStreamingMode(bodyContent.length);
+                    OutputStream outputStream = connection.getOutputStream();
+                    try {
+                        outputStream.write(bodyContent);
+                    } finally {
+                        outputStream.close();
+                    }
+                }
+
+                int code = connection.getResponseCode();
+                String message = connection.getResponseMessage();
+                Headers headers = new Headers(connection.getHeaderFields());
+                InputStream bodyStream = code >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                if (bodyStream == null) {
+                    bodyStream = new ByteArrayInputStream(new byte[0]);
+                }
+                return new Response(code, message, headers, new ResponseBody(bodyStream, connection));
+            } catch (IOException ex) {
+                connection.disconnect();
+                throw ex;
+            }
+        }
+    }
+
+    private static class Response implements Closeable {
+        private final int code;
+        private final String message;
+        private final Headers headers;
+        private final ResponseBody body;
+
+        private Response(int code, String message, Headers headers, ResponseBody body) {
+            this.code = code;
+            this.message = message;
+            this.headers = headers;
+            this.body = body;
+        }
+
+        boolean isSuccessful() {
+            return code >= 200 && code < 300;
+        }
+
+        int code() {
+            return code;
+        }
+
+        String message() {
+            return message;
+        }
+
+        Headers headers() {
+            return headers;
+        }
+
+        String header(String name) {
+            return headers.get(name);
+        }
+
+        ResponseBody body() {
+            return body;
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (body != null) {
+                body.close();
+            }
+        }
+    }
+
+    private static class Headers {
+        private final Map<String, List<String>> headerValues;
+
+        private Headers(Map<String, List<String>> headerValues) {
+            this.headerValues = new LinkedHashMap<String, List<String>>();
+            if (headerValues != null) {
+                for (Map.Entry<String, List<String>> entry : headerValues.entrySet()) {
+                    if (entry.getKey() == null) {
+                        continue;
+                    }
+                    this.headerValues.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        String get(String name) {
+            for (Map.Entry<String, List<String>> entry : headerValues.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) {
+                    List<String> values = entry.getValue();
+                    if (values == null || values.isEmpty()) {
+                        return null;
+                    }
+                    return values.get(0);
+                }
+            }
+            return null;
+        }
+
+        Date getDate(String name) {
+            String value = get(name);
+            if (StringUtils.isEmpty(value)) {
+                return null;
+            }
+
+            List<SimpleDateFormat> dateFormats = Arrays.asList(
+                    new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.ENGLISH),
+                    new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                    new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+            );
+            for (SimpleDateFormat format : dateFormats) {
+                format.setTimeZone(TimeZone.getTimeZone("GMT"));
+                try {
+                    return format.parse(value);
+                } catch (ParseException ignored) {
+                    // fallback to next format
+                }
+            }
+            return null;
+        }
+
+        Set<String> names() {
+            return headerValues.keySet();
+        }
+    }
+
+    private static class ResponseBody implements Closeable {
+        private InputStream inputStream;
+        private final HttpURLConnection connection;
+        private byte[] contentCache;
+
+        private ResponseBody(InputStream inputStream, HttpURLConnection connection) {
+            this.inputStream = inputStream;
+            this.connection = connection;
+        }
+
+        String string() throws IOException {
+            return new String(bytes(), StandardCharsets.UTF_8);
+        }
+
+        byte[] bytes() throws IOException {
+            if (contentCache != null) {
+                return contentCache;
+            }
+            if (inputStream == null) {
+                contentCache = new byte[0];
+                return contentCache;
+            }
+            try {
+                contentCache = readAllBytes(inputStream);
+                return contentCache;
+            } finally {
+                inputStream.close();
+                inputStream = null;
+                connection.disconnect();
+            }
+        }
+
+        InputStream byteStream() {
+            if (contentCache != null) {
+                return new ByteArrayInputStream(contentCache);
+            }
+            if (inputStream == null) {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+            InputStream stream = inputStream;
+            inputStream = null;
+            return new DisconnectInputStream(stream, connection);
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                if (inputStream != null) {
+                    inputStream.close();
+                }
+            } finally {
+                inputStream = null;
+                connection.disconnect();
+            }
+        }
+    }
+
+    private static class DisconnectInputStream extends FilterInputStream {
+        private final HttpURLConnection connection;
+
+        protected DisconnectInputStream(InputStream in, HttpURLConnection connection) {
+            super(in);
+            this.connection = connection;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            } finally {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private static byte[] readAllBytes(InputStream in) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int len;
+        while ((len = in.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, len);
+        }
+        return outputStream.toByteArray();
+    }
+
+    private static boolean containsHeader(Map<String, String> headers, String name) {
+        for (String key : headers.keySet()) {
+            if (key.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @JsonInclude(value = JsonInclude.Include.NON_EMPTY)

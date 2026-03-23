@@ -38,7 +38,6 @@ but the level of support varies across other cloud providers' S3 services:
 ### Technical Advantages
 
 - Unified API interface, no need to write different code for different cloud providers
-- High-performance HTTP client based on OkHttp
 - Complete error handling mechanism
 - Supports most S3 standard features
 - Easy to integrate and extend
