@@ -1983,7 +1983,7 @@ class CandyS3Test {
     void putObjectWithNonEnglishKeyTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
         CandyS3 candyS3 = init(provider);
         String bucket = genTestBucketName("putOWNonEnKeyTest");
-        String objectKey = "我の😯file.data";
+        String objectKey = "我の😯fil e.data";
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
             candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder().build());
