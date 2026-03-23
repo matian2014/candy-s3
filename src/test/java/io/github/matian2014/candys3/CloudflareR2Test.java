@@ -284,6 +284,8 @@ public class CloudflareR2Test {
 
 
     @Test
+    // TODO: Cloudflare R2: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.
+    @Ignore("Note: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.")
     public void cloudflareR2PutAndGetObjectStorageClassTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().putAndGetObjectStorageClassTest(S3Provider.CLOUDFLARE_R2);
     }
@@ -370,6 +372,8 @@ public class CloudflareR2Test {
     }
 
     @Test
+    // TODO: Cloudflare R2: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.
+    @Ignore("Note: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.")
     public void cloudflareR2DownloadObjectStorageClassTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().downloadObjectStorageClassTest(S3Provider.CLOUDFLARE_R2);
     }
