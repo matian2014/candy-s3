@@ -30,3 +30,5 @@ target
 
 # unit tests access key and secret
 /src/test/resources/*.ini
+
+.cursor/

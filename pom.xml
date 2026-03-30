@@ -25,6 +25,7 @@
         <okhttp.version>4.9.0</okhttp.version>
         <commons-lang.version>3.12.0</commons-lang.version>
         <junit.version>5.10.2</junit.version>
+        <junit-platform-launcher.version>1.10.2</junit-platform-launcher.version>
     </properties>
 
     <licenses>
@@ -80,6 +81,12 @@
                 <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-launcher</artifactId>
+                <version>${junit-platform-launcher.version}</version>
+                <scope>test</scope>
+            </dependency>
 
         </dependencies>
     </dependencyManagement>
@@ -104,6 +111,11 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -137,6 +149,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+                <configuration>
+                    <excludes>
+                        <exclude>**/CandyS3Test.java</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
 
             <plugin>

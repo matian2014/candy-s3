@@ -123,25 +123,23 @@ S3Object object = client.getObject("my-bucket", "my-object", downloadOptions);
 client.deleteObject("my-bucket",new DeleteObjectOptions("my-object"));
 ```
 
-## Feature Support Matrix
+## Feature Tested Results
 
-| Feature                | AWS S3 |
-|------------------------|--------|
-| Bucket Create/Delete   | ✅      |
-| Bucket Listing         | ✅      |
-| Object Upload/Download | ✅      |
-| Multipart Upload       | ✅      |
-| Versioning             | ✅      |
-| Object Locking         | ✅      |
-| Conditional Writes     | ✅      |
-| Server-side Encryption | ✅      |
-| Presigned URLs         | ✅      |
-| Tag Management         | ✅      |
-| Access Policies        | ✅      |
+| Feature                                                      | AWS S3 | Aliyun OSS                                                   | Tencent COS                                                  |
+| ------------------------------------------------------------ | ------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Basic operations(bucket create/delete/list/policy, object get/put/multipartUpload/list/delete/copy/presigned-url/...) | ✅      | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> |
+| Versioning                                                   | ✅      | ✅                                                            | ✅                                                            |
+| Object lock                                                  | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| Conditional operations(write/read/copy/delete/...)           | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| Object retention                                             | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| Tagging(bucket tagging, object tagging)                      | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
+| Bucket public access block                                   | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> |
+| Bucket region(create/filter with region)                     | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| Server side encrypt                                          | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
 
 We will continue to track AWS S3 updates and add new features.
 
-For other cloud providers, due to varying levels of support, we cannot guarantee that all operations will be available.
+**For other cloud providers, due to varying levels of support, we cannot guarantee that all operations will be available.**
 You can confirm by running unit tests (typically, core functions like bucket creation/deletion and object
 upload/download are widely supported).
 
@@ -166,6 +164,9 @@ mvn test -Dtest=AliyunOSSTest
 mvn test -Dtest=TencentcloudCosTest
 mvn test -Dtest=CloudflareR2Test
 mvn test -Dtest=CustomS3Test
+
+# Run tests for specific cloud providers and tags
+mvn test '-Dtest=AliyunOssS3Test,TencentCloudCosS3Test' '-Dgroups=basic'
 ```
 
 ## Contributing
