@@ -1,17 +1,24 @@
 package io.github.matian2014.candys3;
 
-import org.junit.AfterClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 
 public class CloudflareR2Test {
 
-    @AfterClass
+    @BeforeAll
+    public static void setUpTempFiles() {
+        CandyS3Test.mkTempFiles();
+    }
+
+    @AfterAll
     public static void cloudflareR2RemoveTestsBucket() throws IOException {
         new CandyS3Test().removeTestBuckets(S3Provider.CLOUDFLARE_R2);
+        CandyS3Test.cleanUpTempFiles();
         System.out.println("cloudflareR2RemoveTestsBucket done.");
     }
 
@@ -30,25 +37,25 @@ public class CloudflareR2Test {
         new CandyS3Test().bucketExistsTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2BucketVersioningTest() throws IOException {
         new CandyS3Test().bucketVersioningTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketAccelerateConfiguration and PutBucketAccelerateConfiguration not implemented")
+    @Disabled("GetBucketAccelerateConfiguration and PutBucketAccelerateConfiguration not implemented")
     @Test
     public void cloudflareR2BucketAccelerateTest() throws IOException {
         new CandyS3Test().bucketAccelerateTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("When using the S3 API, the region for an R2 bucket is auto. For compatibility with tools that do not allow you to specify a region, an empty value and us-east-1 will alias to the auto region.")
+    @Disabled("When using the S3 API, the region for an R2 bucket is auto. For compatibility with tools that do not allow you to specify a region, an empty value and us-east-1 will alias to the auto region.")
     @Test
     public void cloudflareR2BucketLocationTest() throws IOException {
         new CandyS3Test().bucketLocationTest(S3Provider.CLOUDFLARE_R2, "us-east-1", "us-west-2");
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2BucketObjectLockConfigurationTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().bucketObjectLockConfigurationTest(S3Provider.CLOUDFLARE_R2);
@@ -59,13 +66,13 @@ public class CloudflareR2Test {
         new CandyS3Test().bucketPolicyTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketBlockPublicAccess not implemented")
+    @Disabled("GetBucketBlockPublicAccess not implemented")
     @Test
     public void cloudflareR2BucketBlockPublicAccessTest() throws IOException {
         new CandyS3Test().bucketBlockPublicAccessTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetObjectTagging, PutBucketTagging and DeleteObjectTagging not implemented")
+    @Disabled("GetObjectTagging, PutBucketTagging and DeleteObjectTagging not implemented")
     @Test
     public void cloudflareR2BucketTagTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().bucketTagTest(S3Provider.CLOUDFLARE_R2);
@@ -82,7 +89,7 @@ public class CloudflareR2Test {
     }
 
     @Test
-    @Ignore("When using the S3 API, the region for an R2 bucket is auto. For compatibility with tools that do not allow you to specify a region, an empty value and us-east-1 will alias to the auto region.")
+    @Disabled("When using the S3 API, the region for an R2 bucket is auto. For compatibility with tools that do not allow you to specify a region, an empty value and us-east-1 will alias to the auto region.")
     public void cloudflareR2ListBucketsFilterRegionTest() throws IOException {
         new CandyS3Test().listBucketsFilterRegionTest(S3Provider.CLOUDFLARE_R2, "us-west-2");
     }
@@ -92,7 +99,7 @@ public class CloudflareR2Test {
         new CandyS3Test().listBucketsPrefixTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("ListBuckets search parameter max-buckets not implemented")
+    @Disabled("ListBuckets search parameter max-buckets not implemented")
     @Test
     public void cloudflareR2ListBucketsPaginationTest() throws IOException {
         new CandyS3Test().listBucketsPaginationTest(S3Provider.CLOUDFLARE_R2);
@@ -103,13 +110,13 @@ public class CloudflareR2Test {
         new CandyS3Test().listObjectsPaginationTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2ListObjectVersionsTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().listObjectVersionsTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2ListObjectVersionsPaginationTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().listObjectVersionsPaginationTest(S3Provider.CLOUDFLARE_R2);
@@ -120,37 +127,37 @@ public class CloudflareR2Test {
         new CandyS3Test().listObjectsCommonPrefixTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("ListObjectVersions not implemented")
+    @Disabled("ListObjectVersions not implemented")
     @Test
     public void cloudflareR2ListObjectVersionsWithoutVersioningTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().listObjectVersionsWithoutVersioningTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("ListObjectVersions not implemented")
+    @Disabled("ListObjectVersions not implemented")
     @Test
     public void cloudflareR2ListObjectVersionsCommonPrefixTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().listObjectVersionsCommonPrefixTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2GetVersioningObjectTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().getVersioningObjectTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2GetObjectVersionMetadataTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().getObjectVersionMetadataTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2DeleteVersioningObjectTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().deleteVersioningObjectTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2DeleteVersioningObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().deleteVersioningObjectsBatchTest(S3Provider.CLOUDFLARE_R2);
@@ -238,7 +245,7 @@ public class CloudflareR2Test {
         new CandyS3Test().listMultipartUploadsPaginationTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("SSE not implemented for putObject/CreateMultipartUpload/CopyObject")
+    @Disabled("SSE not implemented for putObject/CreateMultipartUpload/CopyObject")
     @Test
     public void cloudflareR2PutAndGetObjectSseTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().putAndGetObjectSseTest(S3Provider.CLOUDFLARE_R2);
@@ -265,7 +272,7 @@ public class CloudflareR2Test {
         new CandyS3Test().copyObjectWriteTargetConditionalTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2CopyObjectVersionTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().copyObjectVersionTest(S3Provider.CLOUDFLARE_R2);
@@ -276,7 +283,7 @@ public class CloudflareR2Test {
         new CandyS3Test().copyObjectPropertiesTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2PutAndGetObjectLockPropertiesTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().putAndGetObjectLockPropertiesTest(S3Provider.CLOUDFLARE_R2);
@@ -285,12 +292,12 @@ public class CloudflareR2Test {
 
     @Test
     // TODO: Cloudflare R2: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.
-    @Ignore("Note: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.")
+    @Disabled("Note: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.")
     public void cloudflareR2PutAndGetObjectStorageClassTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().putAndGetObjectStorageClassTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Header x-amz-tagging and x-amz-tagging-directive not implemented")
+    @Disabled("Header x-amz-tagging and x-amz-tagging-directive not implemented")
     @Test
     public void cloudflareR2PutAndGetObjectTagTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().putAndGetObjectTagTest(S3Provider.CLOUDFLARE_R2);
@@ -302,7 +309,7 @@ public class CloudflareR2Test {
         new CandyS3Test().copyPartTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("CopyPart conditional operations not implemented")
+    @Disabled("CopyPart conditional operations not implemented")
     @Test
     public void cloudflareR2CopyPartConditionalTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().copyPartConditionalTest(S3Provider.CLOUDFLARE_R2);
@@ -313,7 +320,7 @@ public class CloudflareR2Test {
         new CandyS3Test().copyPartWithUnionConditionTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2CopyPartVersionTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().copyPartVersionTest(S3Provider.CLOUDFLARE_R2);
@@ -365,7 +372,7 @@ public class CloudflareR2Test {
         new CandyS3Test().downloadObjectMetadataTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2DownloadObjectObjectLockPropertiesTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().downloadObjectObjectLockPropertiesTest(S3Provider.CLOUDFLARE_R2);
@@ -373,12 +380,12 @@ public class CloudflareR2Test {
 
     @Test
     // TODO: Cloudflare R2: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.
-    @Ignore("Note: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.")
+    @Disabled("Note: The free tier only applies to Standard storage, and does not apply to Infrequent Access storage.")
     public void cloudflareR2DownloadObjectStorageClassTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().downloadObjectStorageClassTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Header x-amz-tagging and x-amz-tagging-directive not implemented")
+    @Disabled("Header x-amz-tagging and x-amz-tagging-directive not implemented")
     @Test
     public void cloudflareR2DownloadObjectTagTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().downloadObjectTagTest(S3Provider.CLOUDFLARE_R2);
@@ -394,79 +401,79 @@ public class CloudflareR2Test {
         new CandyS3Test().putWithPresignUrlTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2ObjectRetentionTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().objectRetentionTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("GetBucketVersioning and PutBucketVersioning not implemented")
+    @Disabled("GetBucketVersioning and PutBucketVersioning not implemented")
     @Test
     public void cloudflareR2ObjectVersionRetentionTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().objectVersionRetentionTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2UpdateObjectGovernancePeriodTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().updateObjectGovernancePeriodTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2UpdateObjectCompliancePeriodTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().updateObjectCompliancePeriodTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2UpdateObjectRetentionModeTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().updateObjectRetentionModeTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2MultipartUploadObjectRetentionTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().multipartUploadObjectRetentionTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2CopyObjectRetentionTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().copyObjectRetentionTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2ObjectRetentionTimezoneTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().objectRetentionTimezoneTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2DeleteRetainObjectTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().deleteRetainObjectTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2DeleteRetainObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().deleteRetainObjectsBatchTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2DeleteLegalHoldObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().deleteLegalHoldObjectsBatchTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2DeleteLegalHoldObjectTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().deleteLegalHoldObjectTest(S3Provider.CLOUDFLARE_R2);
     }
 
-    @Ignore("Object lock not implemented")
+    @Disabled("Object lock not implemented")
     @Test
     public void cloudflareR2UpdateObjectLegalHoldTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().updateObjectLegalHoldTest(S3Provider.CLOUDFLARE_R2);

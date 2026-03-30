@@ -1,16 +1,23 @@
 package io.github.matian2014.candys3;
 
-import org.junit.AfterClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 
 public class AwsS3Test {
 
-    @AfterClass
+    @BeforeAll
+    public static void setUpTempFiles() {
+        CandyS3Test.mkTempFiles();
+    }
+
+    @AfterAll
     public static void awsRemoveTestsBucket() throws IOException {
         new CandyS3Test().removeTestBuckets(S3Provider.AWS);
+        CandyS3Test.cleanUpTempFiles();
         System.out.println("awsRemoveTestsBucket done.");
     }
 

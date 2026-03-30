@@ -1,18 +1,24 @@
 package io.github.matian2014.candys3;
 
-import org.junit.AfterClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 
 public class TencentcloudCosTest {
 
+    @BeforeAll
+    public static void setUpTempFiles() {
+        CandyS3Test.mkTempFiles();
+    }
 
-    @AfterClass
+    @AfterAll
     public static void tencentcloudCosRemoveTestsBucket() throws IOException {
         new CandyS3Test().removeTestBuckets(S3Provider.TENCENTCLOUD_COS);
+        CandyS3Test.cleanUpTempFiles();
         System.out.println("tencentcloudCosRemoveTestsBucket done.");
     }
 
@@ -365,19 +371,19 @@ public class TencentcloudCosTest {
         new CandyS3Test().putWithPresignUrlTest(S3Provider.TENCENTCLOUD_COS);
     }
 
-    @Ignore("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
+    @Disabled("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
     @Test
     public void tencentcloudCosObjectRetentionTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().objectRetentionTest(S3Provider.TENCENTCLOUD_COS);
     }
 
-    @Ignore("Bucket versioning is not allowed when bucket object-lock configuration is enabled. Enable bucket lock configuration is not allowed when the bucket versioning is enabled or suspended.")
+    @Disabled("Bucket versioning is not allowed when bucket object-lock configuration is enabled. Enable bucket lock configuration is not allowed when the bucket versioning is enabled or suspended.")
     @Test
     public void tencentcloudCosObjectVersionRetentionTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().objectVersionRetentionTest(S3Provider.TENCENTCLOUD_COS);
     }
 
-    @Ignore("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
+    @Disabled("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
     @Test
     public void tencentcloudCosUpdateObjectGovernancePeriodTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().updateObjectGovernancePeriodTest(S3Provider.TENCENTCLOUD_COS);
@@ -388,7 +394,7 @@ public class TencentcloudCosTest {
         new CandyS3Test().updateObjectCompliancePeriodTest(S3Provider.TENCENTCLOUD_COS);
     }
 
-    @Ignore("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
+    @Disabled("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
     @Test
     public void tencentcloudCosUpdateObjectRetentionModeTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().updateObjectRetentionModeTest(S3Provider.TENCENTCLOUD_COS);
@@ -409,13 +415,13 @@ public class TencentcloudCosTest {
         new CandyS3Test().objectRetentionTimezoneTest(S3Provider.TENCENTCLOUD_COS);
     }
 
-    @Ignore("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
+    @Disabled("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
     @Test
     public void tencentcloudCosDeleteRetainObjectTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().deleteRetainObjectTest(S3Provider.TENCENTCLOUD_COS);
     }
 
-    @Ignore("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
+    @Disabled("invalid object lock header, x-cos-object-lock mode must be COMPLIANCE")
     @Test
     public void tencentcloudCosDeleteRetainObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
         new CandyS3Test().deleteRetainObjectsBatchTest(S3Provider.TENCENTCLOUD_COS);
@@ -426,7 +432,7 @@ public class TencentcloudCosTest {
         new CandyS3Test().deleteLegalHoldObjectsBatchTest(S3Provider.TENCENTCLOUD_COS);
     }
 
-    @Ignore("Delete object without versionId fail when the object is in legal hold: The object is locked, you are not allowd to put/delete object or modify the metadata via copy object.")
+    @Disabled("Delete object without versionId fail when the object is in legal hold: The object is locked, you are not allowd to put/delete object or modify the metadata via copy object.")
     @Test
     public void tencentcloudCosDeleteLegalHoldObjectTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
         new CandyS3Test().deleteLegalHoldObjectTest(S3Provider.TENCENTCLOUD_COS);
