@@ -124,17 +124,17 @@ client.deleteObject("my-bucket",new DeleteObjectOptions("my-object"));
 
 ## Feature Tested Results
 
-| Feature                                                      | AWS S3 | Aliyun OSS                                                   | Tencent COS                                                  |
-| ------------------------------------------------------------ | ------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Basic operations(bucket create/delete/list/policy, object get/put/multipartUpload/list/delete/copy/presigned-url/...) | ✅      | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> |
-| Versioning                                                   | ✅      | ✅                                                            | ✅                                                            |
-| Object lock                                                  | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| Conditional operations(write/read/copy/delete/...)           | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| Object retention                                             | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| Tagging(bucket tagging, object tagging)                      | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
-| Bucket public access block                                   | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> |
-| Bucket region(create/filter with region)                     | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| Server side encrypt                                          | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
+| Feature                                                      | AWS S3 | Aliyun OSS | Tencent COS |
+| ------------------------------------------------------------ | ------ | ---------- | ----------- |
+| Basic operations(bucket create/delete/list/policy, object get/put/multipartUpload/list/delete/copy/presigned-url/...) | ✅      | 🌤          | 🌤           |
+| Versioning                                                   | ✅      | 🔆          | 🔆           |
+| Object lock                                                  | ✅      | ⛈️          | 🌧️           |
+| Conditional operations(write/read/copy/delete/...)           | ✅      | ⛈️          | 🌧️           |
+| Object retention                                             | ✅      | ⛈️          | 🌧️           |
+| Tagging(bucket tagging, object tagging)                      | ✅      | ⛈️          | 🔆           |
+| Bucket public access block                                   | ✅      | ⛈️          | ⛈️           |
+| Bucket region(create/filter with region)                     | ✅      | ⛈️          | 🌧️           |
+| Server side encrypt                                          | ✅      | ⛈️          | 🔆           |
 
 We will continue to track AWS S3 updates and add new features.
 
