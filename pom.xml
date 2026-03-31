@@ -22,7 +22,6 @@
         <compile.version>8</compile.version>
 
         <jackson.version>2.13.1</jackson.version>
-        <commons-lang.version>3.12.0</commons-lang.version>
         <junit.version>5.10.2</junit.version>
         <junit-platform-launcher.version>1.10.2</junit-platform-launcher.version>
     </properties>
@@ -63,12 +62,6 @@
             </dependency>
 
             <dependency>
-                <groupId>org.apache.commons</groupId>
-                <artifactId>commons-lang3</artifactId>
-                <version>${commons-lang.version}</version>
-            </dependency>
-
-            <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>${junit.version}</version>
@@ -89,11 +82,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-xml</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
         </dependency>
 
         <dependency>
