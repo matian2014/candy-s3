@@ -4,6 +4,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.File;
 import java.io.FileInputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
@@ -145,17 +147,50 @@ public abstract class AWS4SignerBase {
         if (endpoint == null) {
             return "/";
         }
-        String path = endpoint.getPath();
-        if (path == null || path.isEmpty()) {
+        try {
+            URI uri = endpoint.toURI();
+            String rawPath = uri.getRawPath();
+            if (rawPath == null || rawPath.isEmpty()) {
+                return "/";
+            }
+            return uppercasePercentHexDigits(rawPath);
+        } catch (URISyntaxException e) {
+            String path = endpoint.getPath();
+            if (path == null || path.isEmpty()) {
+                return "/";
+            }
+            if (!path.startsWith("/")) {
+                path = "/" + path;
+            }
+            if ("/".equals(path)) {
+                return "/";
+            }
+            return "/" + HttpUtils.uriEncodeS3ObjectKey(path.substring(1));
+        }
+    }
+
+    /**
+     * SigV4 canonical URI uses percent-encoding with uppercase hex digits (e.g. {@code %20} not {@code %2a} for hex).
+     */
+    private static String uppercasePercentHexDigits(String path) {
+        if (path == null) {
             return "/";
         }
-
-        String encodedPath = HttpUtils.urlEncode(path, true);
-        if (encodedPath.startsWith("/")) {
-            return encodedPath;
-        } else {
-            return "/".concat(encodedPath);
+        StringBuilder sb = new StringBuilder(path.length());
+        int i = 0;
+        while (i < path.length()) {
+            char c = path.charAt(i);
+            if (c == '%' && i + 2 < path.length()) {
+                sb.append('%');
+                sb.append(Character.toUpperCase(path.charAt(i + 1)));
+                sb.append(Character.toUpperCase(path.charAt(i + 2)));
+                i += 3;
+            } else {
+                sb.append(c);
+                i++;
+            }
         }
+        return sb.toString();
     }
 
     /**
@@ -183,7 +218,7 @@ public abstract class AWS4SignerBase {
             Map.Entry<String, String> pair = pairs.next();
             String key = pair.getKey();
             String value = pair.getValue();
-            sorted.put(HttpUtils.urlEncode(key, false), HttpUtils.urlEncode(value, false));
+            sorted.put(HttpUtils.uriEncodeQueryComponent(key), HttpUtils.uriEncodeQueryComponent(value));
         }
 
         StringBuilder builder = new StringBuilder();

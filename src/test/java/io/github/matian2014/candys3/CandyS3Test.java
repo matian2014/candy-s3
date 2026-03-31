@@ -3,7 +3,6 @@ package io.github.matian2014.candys3;
 import io.github.matian2014.candys3.exceptions.CandyS3Exception;
 import io.github.matian2014.candys3.exceptions.CommonErrorCode;
 import io.github.matian2014.candys3.options.*;
-import okhttp3.*;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -11,9 +10,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.condition.DisabledIf;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,7 +20,6 @@ import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -2082,7 +2080,7 @@ abstract class CandyS3Test {
     void putObjectWithNonEnglishKeyTest() throws IOException, NoSuchAlgorithmException {
         CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putOWNonEnKeyTest");
-        String objectKey = "我の😯file.data";
+        String objectKey = "我の😯fil e.data";
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
             candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder().build());
@@ -4878,8 +4876,6 @@ abstract class CandyS3Test {
         try {
             long expireSecs = 10;
 
-            OkHttpClient okHttpClient = new OkHttpClient().newBuilder().build();
-
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
 
             candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder()
@@ -4891,26 +4887,30 @@ abstract class CandyS3Test {
             Assertions.assertNotNull(presignUrl);
 
             URL url = new URL(presignUrl);
-            Request.Builder requestBuilder = new Request.Builder()
-                    .url(url)
-                    .get();
-
-            Call call1 = okHttpClient.newCall(requestBuilder.build());
-            call1.timeout().timeout(5, TimeUnit.SECONDS);
-            try (Response response = call1.execute()) {
-                Assertions.assertEquals(response.code(), 200);
-                Assertions.assertEquals(response.body().string(), "1");
+            HttpURLConnection conn1 = (HttpURLConnection) url.openConnection();
+            conn1.setRequestMethod("GET");
+            conn1.setConnectTimeout(5000);
+            conn1.setReadTimeout(5000);
+            try {
+                Assertions.assertEquals(conn1.getResponseCode(), 200);
+                Assertions.assertEquals(readResponseBody(conn1), "1");
+            } finally {
+                conn1.disconnect();
             }
 
             // wait the presigned url expires
             Thread.sleep((expireSecs + 1) * 1000);
 
             // access object with an expired presigned url will fail.
-            Call call2 = okHttpClient.newCall(requestBuilder.build());
-            call2.timeout().timeout(5, TimeUnit.SECONDS);
-            try (Response response = call2.execute()) {
-                Assertions.assertEquals(403, response.code());
-                Assertions.assertTrue(response.body().string().contains("Request has expired"));
+            HttpURLConnection conn2 = (HttpURLConnection) url.openConnection();
+            conn2.setRequestMethod("GET");
+            conn2.setConnectTimeout(5000);
+            conn2.setReadTimeout(5000);
+            try {
+                Assertions.assertEquals(403, conn2.getResponseCode());
+                Assertions.assertTrue(readResponseBody(conn2).contains("Request has expired"));
+            } finally {
+                conn2.disconnect();
             }
 
         } finally {
@@ -4929,8 +4929,6 @@ abstract class CandyS3Test {
         try {
             long expireSecs = 10;
 
-            OkHttpClient okHttpClient = new OkHttpClient().newBuilder().build();
-
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
 
             // generate presigned url and upload object with it
@@ -4938,14 +4936,19 @@ abstract class CandyS3Test {
             Assertions.assertNotNull(presignUrl);
 
             URL url = new URL(presignUrl);
-            Request.Builder requestBuilder = new Request.Builder()
-                    .url(url)
-                    .put(RequestBody.create(bytes));
-
-            Call call1 = okHttpClient.newCall(requestBuilder.build());
-            call1.timeout().timeout(5, TimeUnit.SECONDS);
-            try (Response response = call1.execute()) {
-                Assertions.assertEquals(response.code(), 200);
+            HttpURLConnection conn1 = (HttpURLConnection) url.openConnection();
+            conn1.setRequestMethod("PUT");
+            conn1.setConnectTimeout(5000);
+            conn1.setReadTimeout(5000);
+            conn1.setDoOutput(true);
+            conn1.setFixedLengthStreamingMode(bytes.length);
+            try (OutputStream out = conn1.getOutputStream()) {
+                out.write(bytes);
+            }
+            try {
+                Assertions.assertEquals(conn1.getResponseCode(), 200);
+            } finally {
+                conn1.disconnect();
             }
 
             S3Object s3Object = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
@@ -4955,11 +4958,20 @@ abstract class CandyS3Test {
             Thread.sleep((expireSecs + 1) * 1000);
 
             // upload object with an expired presigned url will fail.
-            Call call2 = okHttpClient.newCall(requestBuilder.build());
-            call2.timeout().timeout(5, TimeUnit.SECONDS);
-            try (Response response = call2.execute()) {
-                Assertions.assertEquals(response.code(), 403);
-                Assertions.assertTrue(response.body().string().contains("Request has expired"));
+            HttpURLConnection conn2 = (HttpURLConnection) url.openConnection();
+            conn2.setRequestMethod("PUT");
+            conn2.setConnectTimeout(5000);
+            conn2.setReadTimeout(5000);
+            conn2.setDoOutput(true);
+            conn2.setFixedLengthStreamingMode(bytes.length);
+            try (OutputStream out = conn2.getOutputStream()) {
+                out.write(bytes);
+            }
+            try {
+                Assertions.assertEquals(conn2.getResponseCode(), 403);
+                Assertions.assertTrue(readResponseBody(conn2).contains("Request has expired"));
+            } finally {
+                conn2.disconnect();
             }
 
         } finally {
@@ -6352,10 +6364,26 @@ abstract class CandyS3Test {
         }
     }
 
+    private static String readResponseBody(HttpURLConnection connection) throws IOException {
+        InputStream input = connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        if (input == null) {
+            return "";
+        }
+        try {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = input.read(buffer)) != -1) {
+                output.write(buffer, 0, len);
+            }
+            return new String(output.toByteArray(), StandardCharsets.UTF_8);
+        } finally {
+            input.close();
+        }
+    }
+
 
     public static void mkTempFiles() {
-        Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
-
         File tempDir = new File("./temp/");
         if (!tempDir.exists()) {
             tempDir.mkdirs();

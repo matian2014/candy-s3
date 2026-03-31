@@ -13,17 +13,18 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import io.github.matian2014.candys3.options.*;
 import io.github.matian2014.candys3.signer.*;
-import okhttp3.*;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 public class CandyS3 {
@@ -78,7 +79,7 @@ public class CandyS3 {
     protected String cloudflareR2AccountId;
 
     protected final XmlMapper xmlMapper;
-    protected final OkHttpClient okHttpClient;
+    protected final HttpClientAdapter okHttpClient;
 
     /**
      * The default chunk size for multipart uploads, in bytes.
@@ -88,7 +89,7 @@ public class CandyS3 {
     public CandyS3(S3Provider provider) {
         this.provider = provider;
         this.xmlMapper = XmlMapper.xmlBuilder().build();
-        this.okHttpClient = new OkHttpClient().newBuilder().build();
+        this.okHttpClient = new HttpClientAdapter().newBuilder().build();
     }
 
     public S3Provider getProvider() {
@@ -220,7 +221,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl("") + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl("") + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -286,7 +287,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket));
+        URL url = buildNormalizedUrl(buildUrl(bucket));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_HEAD, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -335,7 +336,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -391,7 +392,7 @@ public class CandyS3 {
         String bodyHash = StringUtils.isEmpty(body) ? AWS4SignerBase.EMPTY_BODY_SHA256 : BinaryUtils.toHex(AWS4SignerBase.hash(body));
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(options.getBucket()));
+        URL url = buildNormalizedUrl(buildUrl(options.getBucket()));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -437,7 +438,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket));
+        URL url = buildNormalizedUrl(buildUrl(bucket));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_DELETE, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -489,7 +490,7 @@ public class CandyS3 {
         String bodyHash = BinaryUtils.toHex(AWS4SignerBase.hash(body));
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -534,7 +535,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -581,7 +582,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -672,7 +673,7 @@ public class CandyS3 {
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
         headers.put(HttpConstants.HEADER_CONTENT_MD5, BinaryUtils.md5(body));
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -717,7 +718,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -793,7 +794,7 @@ public class CandyS3 {
         String bodyHash = BinaryUtils.toHex(AWS4SignerBase.hash(body));
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -827,7 +828,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_DELETE, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -873,7 +874,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -939,7 +940,7 @@ public class CandyS3 {
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
         headers.put(HttpConstants.HEADER_CONTENT_MD5, BinaryUtils.md5(body));
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -973,7 +974,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_DELETE, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1018,7 +1019,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1073,7 +1074,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1159,7 +1160,7 @@ public class CandyS3 {
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
         headers.put(HttpConstants.HEADER_CONTENT_MD5, BinaryUtils.md5(body));
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1193,7 +1194,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_DELETE, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1238,7 +1239,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1316,7 +1317,7 @@ public class CandyS3 {
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
         headers.put(HttpConstants.HEADER_CONTENT_MD5, BinaryUtils.md5(body));
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1368,7 +1369,7 @@ public class CandyS3 {
         String bodyHash = BinaryUtils.toHex(AWS4SignerBase.hash(body));
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1413,7 +1414,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1475,7 +1476,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1568,7 +1569,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1802,7 +1803,7 @@ public class CandyS3 {
         contentMD5 = BinaryUtils.md5(data);
         includedHeaders.put(HttpConstants.HEADER_CONTENT_MD5, contentMD5);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1894,7 +1895,7 @@ public class CandyS3 {
 
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_HEAD, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -1986,7 +1987,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2089,7 +2090,7 @@ public class CandyS3 {
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
         headers.put(HttpConstants.HEADER_CONTENT_MD5, BinaryUtils.md5(body));
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2153,7 +2154,7 @@ public class CandyS3 {
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
         headers.put(HttpConstants.HEADER_CONTENT_MD5, BinaryUtils.md5(body));
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2207,7 +2208,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2306,7 +2307,7 @@ public class CandyS3 {
 
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2433,7 +2434,7 @@ public class CandyS3 {
 
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + options.getKey() + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(options.getKey()) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_DELETE, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2507,7 +2508,7 @@ public class CandyS3 {
         String bodyHash = BinaryUtils.toHex(AWS4SignerBase.hash(body));
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_POST, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2612,7 +2613,7 @@ public class CandyS3 {
             }
         }
 
-        headers.put("x-amz-copy-source", HttpUtils.urlEncode(options.getCopySource(), true));
+        headers.put("x-amz-copy-source", HttpUtils.formatAmzCopySource(options.getCopySource()));
         if (StringUtils.isNotEmpty(options.getCopySourceVersionId())) {
             headers.put("x-amz-copy-source", headers.get("x-amz-copy-source") + "?versionId=" + options.getCopySourceVersionId());
         }
@@ -2623,7 +2624,8 @@ public class CandyS3 {
         String bodyHash = AWS4SignerBase.EMPTY_BODY_SHA256;
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey);
+        String objectUrl = buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey);
+        URL url = buildNormalizedUrl(objectUrl);
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2679,7 +2681,8 @@ public class CandyS3 {
         Map<String, String> params = new HashMap<>();
         params.put("X-Amz-Expires", options.getTtl() + "");
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey);
+        String presignBaseUrl = buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey);
+        URL url = buildNormalizedUrl(presignBaseUrl);
 
         AWS4SignerForQueryParameterAuth signer = new AWS4SignerForQueryParameterAuth(
                 url, options.getMethod(), HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2689,7 +2692,7 @@ public class CandyS3 {
                 accessKey,
                 secretKey);
 
-        return url + "?" + authorizationQueryParams;
+        return presignBaseUrl + "?" + authorizationQueryParams;
     }
 
     /**
@@ -2736,7 +2739,7 @@ public class CandyS3 {
         String bodyHash = AWS4SignerBase.EMPTY_BODY_SHA256;
         includedHeaders.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_POST, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2790,7 +2793,7 @@ public class CandyS3 {
 
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_DELETE, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2858,7 +2861,7 @@ public class CandyS3 {
         String bodyHash = BinaryUtils.toHex(AWS4SignerBase.hash(body));
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_POST, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -2937,7 +2940,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -3091,7 +3094,7 @@ public class CandyS3 {
         }
 
         Map<String, String> headers = parseCopySourceConditionHeaders(options.getCopySourceCondition());
-        headers.put("x-amz-copy-source", HttpUtils.urlEncode(options.getCopySource(), true));
+        headers.put("x-amz-copy-source", HttpUtils.formatAmzCopySource(options.getCopySource()));
         if (StringUtils.isNotEmpty(options.getCopySourceVersionId())) {
             headers.put("x-amz-copy-source", headers.get("x-amz-copy-source") + "?versionId=" + options.getCopySourceVersionId());
         }
@@ -3106,7 +3109,7 @@ public class CandyS3 {
         String bodyHash = AWS4SignerBase.EMPTY_BODY_SHA256;
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, bodyHash);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_PUT, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -3179,7 +3182,7 @@ public class CandyS3 {
         Map<String, String> headers = new HashMap<String, String>();
         headers.put(HttpConstants.HEADER_AMZ_CONTENT_HASH, AWS4SignerBase.EMPTY_BODY_SHA256);
 
-        URL url = new URL(buildUrl(bucket) + "/" + objectKey + buildParams(params));
+        URL url = buildNormalizedUrl(buildUrl(bucket) + "/" + HttpUtils.uriEncodeS3ObjectKey(objectKey) + buildParams(params));
 
         AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(
                 url, HttpConstants.HTTP_METHOD_GET, HttpConstants.CONSTANT_AWS_SERVICENAME_S3, region);
@@ -3458,6 +3461,401 @@ public class CandyS3 {
         s3Object.setServerSideEncryptionConfiguration(sseProperties);
     }
 
+    private static class HttpClientAdapter {
+        Builder newBuilder() {
+            return new Builder();
+        }
+
+        Call newCall(Request request) {
+            return new Call(request);
+        }
+
+        private static class Builder {
+            HttpClientAdapter build() {
+                return new HttpClientAdapter();
+            }
+        }
+    }
+
+    private static class Request {
+        private final URL url;
+        private final String method;
+        private final Map<String, String> headers;
+        private final RequestBody body;
+
+        private Request(URL url, String method, Map<String, String> headers, RequestBody body) {
+            this.url = url;
+            this.method = method;
+            this.headers = headers;
+            this.body = body;
+        }
+
+        private static class Builder {
+            private URL url;
+            private String method = HttpConstants.HTTP_METHOD_GET;
+            private final Map<String, String> headers = new LinkedHashMap<String, String>();
+            private RequestBody body;
+
+            Builder url(URL url) {
+                // Caller already passes buildNormalizedUrl(...); avoid a second toURI().toASCIIString()
+                // round-trip here or the path used by HttpURLConnection can diverge from the URL used for SigV4.
+                this.url = url;
+                return this;
+            }
+
+            Builder addHeader(String key, String value) {
+                headers.put(key, value);
+                return this;
+            }
+
+            Builder get() {
+                method = HttpConstants.HTTP_METHOD_GET;
+                body = null;
+                return this;
+            }
+
+            Builder head() {
+                method = HttpConstants.HTTP_METHOD_HEAD;
+                body = null;
+                return this;
+            }
+
+            Builder delete() {
+                method = HttpConstants.HTTP_METHOD_DELETE;
+                body = null;
+                return this;
+            }
+
+            Builder put(RequestBody body) {
+                method = HttpConstants.HTTP_METHOD_PUT;
+                this.body = body;
+                return this;
+            }
+
+            Builder post(RequestBody body) {
+                method = HttpConstants.HTTP_METHOD_POST;
+                this.body = body;
+                return this;
+            }
+
+            Request build() {
+                return new Request(url, method, new LinkedHashMap<String, String>(headers), body);
+            }
+        }
+    }
+
+    private static class MediaType {
+        private final String value;
+
+        private MediaType(String value) {
+            this.value = value;
+        }
+
+        static MediaType get(String value) {
+            return new MediaType(value);
+        }
+    }
+
+    private static class RequestBody {
+        private final byte[] content;
+        private final MediaType mediaType;
+
+        private RequestBody(byte[] content, MediaType mediaType) {
+            this.content = content;
+            this.mediaType = mediaType;
+        }
+
+        static RequestBody create(byte[] content) {
+            return new RequestBody(content == null ? new byte[0] : content, null);
+        }
+
+        static RequestBody create(String content, MediaType mediaType) {
+            return new RequestBody(content == null ? new byte[0] : content.getBytes(StandardCharsets.UTF_8), mediaType);
+        }
+    }
+
+    private static class Timeout {
+        private long timeoutMillis = 0;
+
+        Timeout timeout(long timeout, TimeUnit unit) {
+            timeoutMillis = timeout <= 0 ? 0 : unit.toMillis(timeout);
+            return this;
+        }
+    }
+
+    private static class Call {
+        private final Request request;
+        private final Timeout timeout = new Timeout();
+
+        private Call(Request request) {
+            this.request = request;
+        }
+
+        Timeout timeout() {
+            return timeout;
+        }
+
+        Response execute() throws IOException {
+            HttpURLConnection connection = (HttpURLConnection) request.url.openConnection();
+            try {
+                connection.setRequestMethod(request.method);
+                connection.setUseCaches(false);
+                connection.setDoInput(true);
+                connection.setInstanceFollowRedirects(false);
+
+                if (timeout.timeoutMillis > 0) {
+                    int timeoutMs = timeout.timeoutMillis > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeout.timeoutMillis;
+                    connection.setConnectTimeout(timeoutMs);
+                    connection.setReadTimeout(timeoutMs);
+                } else {
+                    connection.setConnectTimeout(0);
+                    connection.setReadTimeout(0);
+                }
+
+                for (Map.Entry<String, String> header : request.headers.entrySet()) {
+                    connection.setRequestProperty(header.getKey(), header.getValue());
+                }
+
+                if (request.body != null) {
+                    if (request.body.mediaType != null && !containsHeader(request.headers, "Content-Type")) {
+                        connection.setRequestProperty("Content-Type", request.body.mediaType.value);
+                    }
+                    connection.setDoOutput(true);
+                    byte[] bodyContent = request.body.content == null ? new byte[0] : request.body.content;
+                    connection.setFixedLengthStreamingMode(bodyContent.length);
+                    OutputStream outputStream = connection.getOutputStream();
+                    try {
+                        outputStream.write(bodyContent);
+                    } finally {
+                        outputStream.close();
+                    }
+                }
+
+                int code = connection.getResponseCode();
+                String message = connection.getResponseMessage();
+                Headers headers = new Headers(connection.getHeaderFields());
+                InputStream bodyStream = code >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                if (bodyStream == null) {
+                    bodyStream = new ByteArrayInputStream(new byte[0]);
+                }
+                return new Response(code, message, headers, new ResponseBody(bodyStream, connection));
+            } catch (IOException ex) {
+                connection.disconnect();
+                throw ex;
+            }
+        }
+    }
+
+    private static class Response implements Closeable {
+        private final int code;
+        private final String message;
+        private final Headers headers;
+        private final ResponseBody body;
+
+        private Response(int code, String message, Headers headers, ResponseBody body) {
+            this.code = code;
+            this.message = message;
+            this.headers = headers;
+            this.body = body;
+        }
+
+        boolean isSuccessful() {
+            return code >= 200 && code < 300;
+        }
+
+        int code() {
+            return code;
+        }
+
+        String message() {
+            return message;
+        }
+
+        Headers headers() {
+            return headers;
+        }
+
+        String header(String name) {
+            return headers.get(name);
+        }
+
+        ResponseBody body() {
+            return body;
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (body != null) {
+                body.close();
+            }
+        }
+    }
+
+    private static class Headers {
+        private final Map<String, List<String>> headerValues;
+
+        private Headers(Map<String, List<String>> headerValues) {
+            this.headerValues = new LinkedHashMap<String, List<String>>();
+            if (headerValues != null) {
+                for (Map.Entry<String, List<String>> entry : headerValues.entrySet()) {
+                    if (entry.getKey() == null) {
+                        continue;
+                    }
+                    this.headerValues.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        String get(String name) {
+            for (Map.Entry<String, List<String>> entry : headerValues.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) {
+                    List<String> values = entry.getValue();
+                    if (values == null || values.isEmpty()) {
+                        return null;
+                    }
+                    return values.get(0);
+                }
+            }
+            return null;
+        }
+
+        Date getDate(String name) {
+            String value = get(name);
+            if (StringUtils.isEmpty(value)) {
+                return null;
+            }
+
+            List<SimpleDateFormat> dateFormats = Arrays.asList(
+                    new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.ENGLISH),
+                    new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                    new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+            );
+            for (SimpleDateFormat format : dateFormats) {
+                format.setTimeZone(TimeZone.getTimeZone("GMT"));
+                try {
+                    return format.parse(value);
+                } catch (ParseException ignored) {
+                    // fallback to next format
+                }
+            }
+            return null;
+        }
+
+        Set<String> names() {
+            return headerValues.keySet();
+        }
+    }
+
+    private static class ResponseBody implements Closeable {
+        private InputStream inputStream;
+        private final HttpURLConnection connection;
+        private byte[] contentCache;
+
+        private ResponseBody(InputStream inputStream, HttpURLConnection connection) {
+            this.inputStream = inputStream;
+            this.connection = connection;
+        }
+
+        String string() throws IOException {
+            return new String(bytes(), StandardCharsets.UTF_8);
+        }
+
+        byte[] bytes() throws IOException {
+            if (contentCache != null) {
+                return contentCache;
+            }
+            if (inputStream == null) {
+                contentCache = new byte[0];
+                return contentCache;
+            }
+            try {
+                contentCache = readAllBytes(inputStream);
+                return contentCache;
+            } finally {
+                inputStream.close();
+                inputStream = null;
+                connection.disconnect();
+            }
+        }
+
+        InputStream byteStream() {
+            if (contentCache != null) {
+                return new ByteArrayInputStream(contentCache);
+            }
+            if (inputStream == null) {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+            InputStream stream = inputStream;
+            inputStream = null;
+            return new DisconnectInputStream(stream, connection);
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                if (inputStream != null) {
+                    inputStream.close();
+                }
+            } finally {
+                inputStream = null;
+                connection.disconnect();
+            }
+        }
+    }
+
+    private static class DisconnectInputStream extends FilterInputStream {
+        private final HttpURLConnection connection;
+
+        protected DisconnectInputStream(InputStream in, HttpURLConnection connection) {
+            super(in);
+            this.connection = connection;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            } finally {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private static byte[] readAllBytes(InputStream in) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int len;
+        while ((len = in.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, len);
+        }
+        return outputStream.toByteArray();
+    }
+
+    private static boolean containsHeader(Map<String, String> headers, String name) {
+        for (String key : headers.keySet()) {
+            if (key.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static URL normalizeToAsciiUrl(URL url) {
+        try {
+            return new URL(url.toURI().toASCIIString());
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    /**
+     * Parses the request URL and applies the same ASCII normalization used before {@link HttpURLConnection}
+     * so SigV4 signing sees the same path as the wire request.
+     */
+    private URL buildNormalizedUrl(String spec) throws MalformedURLException {
+        return normalizeToAsciiUrl(new URL(spec));
+    }
+
     @JsonInclude(value = JsonInclude.Include.NON_EMPTY)
     private static class CreateBucketConfiguration {
         @JacksonXmlProperty(isAttribute = true)
@@ -3668,9 +4066,9 @@ public class CandyS3 {
     private String buildUrlKVVariables(Map<String, String> params) {
         StringBuilder builder = new StringBuilder();
         for (Map.Entry<String, String> entry : params.entrySet()) {
-            builder.append(entry.getKey());
+            builder.append(HttpUtils.uriEncodeQueryComponent(entry.getKey()));
             if (!StringUtils.isEmpty(entry.getValue())) {
-                builder.append("=").append(HttpUtils.urlEncode(entry.getValue(), false));
+                builder.append("=").append(HttpUtils.uriEncodeQueryComponent(entry.getValue()));
             }
             builder.append("&");
         }
