@@ -25,6 +25,8 @@ public class HttpUtils {
     /**
      * Encodes a query parameter name or value for SigV4 canonical query strings and for request URLs.
      * {@link URLEncoder} encodes spaces as {@code +}; AWS Signature V4 requires spaces as {@code %20}.
+     * @param s the original string
+     * @return uriEncode query string
      */
     public static String uriEncodeQueryComponent(String s) {
         if (s == null) {
@@ -41,6 +43,8 @@ public class HttpUtils {
      * Percent-encodes an S3 object key for use in the request URI path (virtual-hosted or path-style).
      * Slash ({@code /}) is preserved as a delimiter; each segment is UTF-8 encoded per URI path rules
      * (spaces become {@code %20}, not {@code +}). This aligns with SigV4 canonical URI expectations.
+     * @param objectKey objectKey
+     * @return uriEncode objectKey
      */
     public static String uriEncodeS3ObjectKey(String objectKey) {
         if (objectKey == null || objectKey.isEmpty()) {
@@ -60,6 +64,8 @@ public class HttpUtils {
     /**
      * Builds {@code x-amz-copy-source} value {@code /bucket/key} with the key path encoded like {@link #uriEncodeS3ObjectKey(String)}.
      * ARN-style copy sources are returned with a leading slash and without path encoding.
+     * @param copySource copySource
+     * @return formatted s3 copy source
      */
     public static String formatAmzCopySource(String copySource) {
         if (copySource == null) {
