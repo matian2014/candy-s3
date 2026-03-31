@@ -5,7 +5,7 @@ import java.lang.reflect.Array;
 /**
  * Integrates source code from the apache commons-lang package for project use.
  * Replaces Maven dependency to simplify project dependencies.
- * @link <a href="https://github.com/apache/commons-lang">...</a>
+ * reference: <a href="https://github.com/apache/commons-lang">apache commons lang</a>
  */
 public final class ArrayUtils {
 
