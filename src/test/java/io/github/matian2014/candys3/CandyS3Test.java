@@ -3,11 +3,13 @@ package io.github.matian2014.candys3;
 import io.github.matian2014.candys3.exceptions.CandyS3Exception;
 import io.github.matian2014.candys3.exceptions.CommonErrorCode;
 import io.github.matian2014.candys3.options.*;
-import io.github.matian2014.candys3.options.*;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -18,9 +20,31 @@ import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-class CandyS3Test {
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+abstract class CandyS3Test {
+
+    protected abstract S3Provider provider();
+
+    // Used by bucketLocationTest/listBucketsFilterRegionTest to pick a non-default region.
+    protected abstract String bucketLocationOtherRegion();
+
+    protected abstract String listBucketsFilterOtherRegion();
+
+    @BeforeAll
+    public void setUpTempFiles() {
+        CandyS3Test.mkTempFiles();
+    }
+
+    @AfterAll
+    public void removeTestsBucketAndCleanUp() throws IOException {
+        removeTestBuckets(provider());
+        CandyS3Test.cleanUpTempFiles();
+        System.out.println("removeTestsBucketAndCleanUp done.");
+    }
 
     private static String S3_ACCESSKEY;
     private static String S3_SECRETKEY;
@@ -97,33 +121,37 @@ class CandyS3Test {
         }
     }
 
-    void createBucketTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void createBucketTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String createdBucket = genTestBucketName("createBucketTest");
         candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(createdBucket).build());
         List<Bucket> buckets = candyS3.listBucket(new ListBucketOptions()).getResults();
-        Assert.assertTrue(buckets.stream()
+        Assertions.assertTrue(buckets.stream()
                 .anyMatch(bucket -> bucket.getName().equals(createdBucket)));
 
         candyS3.deleteBucket(createdBucket);
         buckets = candyS3.listBucket(new ListBucketOptions()).getResults();
-        Assert.assertFalse(buckets.stream()
+        Assertions.assertFalse(buckets.stream()
                 .anyMatch(bucket -> bucket.getName().equals(createdBucket)));
     }
 
-    void createBucketErrorTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void createBucketErrorTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String existsBucket = "aaa"; // a bucket name has existed
         String createdBucket = genTestBucketName("createBucketErrorTest");
         try {
             // Tencent cloud COS: Bucket format should be <bucketname>-<appid>
-            if (!S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (!S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 try {
                     candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(existsBucket).build());
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.BUCKET_ALREADY_EXISTS.getCode());
-                    Assert.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "BucketAlreadyExists");
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.BUCKET_ALREADY_EXISTS.getCode());
+                    Assertions.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "BucketAlreadyExists");
                 }
             }
 
@@ -132,16 +160,18 @@ class CandyS3Test {
             try {
                 candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(createdBucket).build());
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.BUCKET_ALREADY_EXISTS.getCode());
-                Assert.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "BucketAlreadyOwnedByYou");
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.BUCKET_ALREADY_EXISTS.getCode());
+                Assertions.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "BucketAlreadyOwnedByYou");
             }
         } finally {
         }
     }
 
-    void listBucketsTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listBucketsTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String createdBucket = genTestBucketName("listBucketsTest");
         try {
             List<Bucket> buckets = candyS3.listBucket(new ListBucketOptions()).getResults();
@@ -149,35 +179,37 @@ class CandyS3Test {
 
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(createdBucket).build());
             buckets = candyS3.listBucket(new ListBucketOptions()).getResults();
-            Assert.assertEquals(buckets.size(), initialCnt + 1);
+            Assertions.assertEquals(buckets.size(), initialCnt + 1);
         } finally {
             candyS3.deleteBucket(createdBucket);
         }
     }
 
-    void listBucketsFilterRegionTest(S3Provider provider, String otherRegion) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.bucketRegion)
+    void listBucketsFilterRegionTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("listBucketsFilterRegionTest");
-        String createRegion = otherRegion;
+        String createRegion = listBucketsFilterOtherRegion();
         try {
             String listRegion = candyS3.region; // default to 'us-east-1'
             // Ensure we use different region here.
-            Assert.assertNotEquals(createRegion, listRegion);
+            Assertions.assertNotEquals(createRegion, listRegion);
 
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket)
                     .locationConstraint(createRegion).build());
 
             candyS3.setRegion(listRegion);
             List<Bucket> allRegionBuckets = candyS3.listBucket(new ListBucketOptions()).getResults();
-            Assert.assertTrue(allRegionBuckets.stream()
+            Assertions.assertTrue(allRegionBuckets.stream()
                     .anyMatch(b -> b.getName().equals(bucket)));
             List<Bucket> filterRegionNoneMatchBuckets = candyS3.listBucket(new ListBucketOptions().filterBucketRegion(true)).getResults();
-            Assert.assertTrue(filterRegionNoneMatchBuckets.stream()
+            Assertions.assertTrue(filterRegionNoneMatchBuckets.stream()
                     .noneMatch(b -> b.getName().equals(bucket)));
 
             candyS3.setRegion(createRegion);
             List<Bucket> filterRegionMatchBuckets = candyS3.listBucket(new ListBucketOptions().filterBucketRegion(true)).getResults();
-            Assert.assertTrue(filterRegionMatchBuckets.stream()
+            Assertions.assertTrue(filterRegionMatchBuckets.stream()
                     .anyMatch(b -> b.getName().equals(bucket)));
         } finally {
             candyS3.setRegion(createRegion);
@@ -185,8 +217,10 @@ class CandyS3Test {
         }
     }
 
-    void listBucketsPrefixTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listBucketsPrefixTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
 
         // Tencent cloud COS: Bucket format should be <bucketname>-<appid>
         String bucket1 = genTestBucketName("lsBPrefix--1");
@@ -194,26 +228,26 @@ class CandyS3Test {
 
         // bucket name should use lowercase letters
         String prefix = bucket1.substring(0, bucket1.indexOf("--1".toLowerCase()));
-        Assert.assertTrue(prefix.endsWith("lsBPrefix".toLowerCase()));
-        Assert.assertTrue(bucket1.startsWith(prefix));
-        Assert.assertTrue(bucket2.startsWith(prefix));
+        Assertions.assertTrue(prefix.endsWith("lsBPrefix".toLowerCase()));
+        Assertions.assertTrue(bucket1.startsWith(prefix));
+        Assertions.assertTrue(bucket2.startsWith(prefix));
 
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket1).build());
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket2).build());
 
             List<Bucket> bucketsList1 = candyS3.listBucket(new ListBucketOptions().prefix(prefix)).getResults();
-            Assert.assertEquals(2, bucketsList1.size());
-            Assert.assertTrue(bucketsList1.stream()
+            Assertions.assertEquals(2, bucketsList1.size());
+            Assertions.assertTrue(bucketsList1.stream()
                     .anyMatch(b -> b.getName().equals(bucket1)));
-            Assert.assertTrue(bucketsList1.stream()
+            Assertions.assertTrue(bucketsList1.stream()
                     .anyMatch(b -> b.getName().equals(bucket2)));
 
             List<Bucket> bucketsList2 = candyS3.listBucket(new ListBucketOptions().prefix(prefix + "--1")).getResults();
-            Assert.assertEquals(1, bucketsList2.size());
-            Assert.assertTrue(bucketsList2.stream()
+            Assertions.assertEquals(1, bucketsList2.size());
+            Assertions.assertTrue(bucketsList2.stream()
                     .anyMatch(b -> b.getName().equals(bucket1)));
-            Assert.assertTrue(bucketsList2.stream()
+            Assertions.assertTrue(bucketsList2.stream()
                     .noneMatch(b -> b.getName().equals(bucket2)));
 
         } finally {
@@ -222,8 +256,10 @@ class CandyS3Test {
         }
     }
 
-    void listBucketsPaginationTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listBucketsPaginationTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         List<String> createdBuckets = new ArrayList<>();
         try {
             int oldCount = candyS3.listBucket(new ListBucketOptions()).getResults().size();
@@ -240,7 +276,7 @@ class CandyS3Test {
             }
 
             int newCount = candyS3.listBucket(new ListBucketOptions()).getResults().size();
-            Assert.assertEquals(newCount, oldCount + 10);
+            Assertions.assertEquals(newCount, oldCount + 10);
 
             List<Bucket> listBuckets = new ArrayList<>();
             ListPaginationResult<Bucket> result;
@@ -255,16 +291,16 @@ class CandyS3Test {
 
                 loopTime++;
                 if (loopTime * 3 < newCount) {
-                    Assert.assertTrue(listBuckets.size() > lastCount);
-                    Assert.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
+                    Assertions.assertTrue(listBuckets.size() > lastCount);
+                    Assertions.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
                 }
                 lastCount = listBuckets.size();
             } while (StringUtils.isNotEmpty(result.getNextPaginationMarker()));
 
             int exceptedLoopTime = newCount % 3 == 0 ? newCount / 3 : newCount / 3 + 1;
-            Assert.assertEquals(newCount, listBuckets.size());
-            Assert.assertEquals(exceptedLoopTime, loopTime);
-            Assert.assertTrue(StringUtils.isEmpty(listBucketOptions.getContinuationToken()));
+            Assertions.assertEquals(newCount, listBuckets.size());
+            Assertions.assertEquals(exceptedLoopTime, loopTime);
+            Assertions.assertTrue(StringUtils.isEmpty(listBucketOptions.getContinuationToken()));
         } finally {
             for (int i = 0, len = createdBuckets.size(); i < len; i++) {
                 try {
@@ -276,63 +312,71 @@ class CandyS3Test {
         }
     }
 
-    void bucketExistsTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void bucketExistsTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("bucketExistsTest");
         try {
-            Assert.assertFalse(candyS3.bucketExists(bucket));
+            Assertions.assertFalse(candyS3.bucketExists(bucket));
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
-            Assert.assertTrue(candyS3.bucketExists(bucket));
+            Assertions.assertTrue(candyS3.bucketExists(bucket));
             candyS3.deleteBucket(bucket);
-            Assert.assertFalse(candyS3.bucketExists(bucket));
+            Assertions.assertFalse(candyS3.bucketExists(bucket));
         } finally {
         }
     }
 
-    void bucketVersioningTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void bucketVersioningTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("bucketVersioningTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
-            Assert.assertFalse(candyS3.isBucketVersioning(bucket));
+            Assertions.assertFalse(candyS3.isBucketVersioning(bucket));
             candyS3.setBucketVersioning(bucket, true);
-            Assert.assertTrue(candyS3.isBucketVersioning(bucket));
+            Assertions.assertTrue(candyS3.isBucketVersioning(bucket));
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void bucketAccelerateTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.bucketRegion)
+    void bucketAccelerateTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("bucketAccelerateTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
-            Assert.assertFalse(candyS3.isBucketAccelerated(bucket));
+            Assertions.assertFalse(candyS3.isBucketAccelerated(bucket));
             candyS3.setBucketAccelerate(bucket, true);
-            Assert.assertTrue(candyS3.isBucketAccelerated(bucket));
+            Assertions.assertTrue(candyS3.isBucketAccelerated(bucket));
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void bucketLocationTest(S3Provider provider, String defaultRegion, String otherRegion) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.bucketRegion)
+    void bucketLocationTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String bucket1 = genTestBucketName("bucketLocationTest1");
         String bucket2 = genTestBucketName("bucketLocationTest2");
-        String region = otherRegion;
-        String s3DefaultRegion = defaultRegion;
+        String region = bucketLocationOtherRegion();
+        String s3DefaultRegion = candyS3.region;
         try {
             candyS3.region = region;
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket1).locationConstraint(region).build());
-            Assert.assertEquals(region, candyS3.getBucketLocation(bucket1));
+            Assertions.assertEquals(region, candyS3.getBucketLocation(bucket1));
 
             // Buckets in Default Region have a LocationConstraint of null.
             candyS3.region = s3DefaultRegion;
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket2).build());
-            if (S3Provider.AWS.equals(provider)) {
-                Assert.assertTrue(StringUtils.isEmpty(candyS3.getBucketLocation(bucket2)));
+            if (S3Provider.AWS.equals(provider())) {
+                Assertions.assertTrue(StringUtils.isEmpty(candyS3.getBucketLocation(bucket2)));
             } else {
-                Assert.assertEquals(s3DefaultRegion, candyS3.getBucketLocation(bucket2));
+                Assertions.assertEquals(s3DefaultRegion, candyS3.getBucketLocation(bucket2));
             }
         } finally {
             candyS3.region = region;
@@ -342,44 +386,47 @@ class CandyS3Test {
         }
     }
 
-    void bucketObjectLockConfigurationTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectLock)
+    @Tag(TestTag.objectRetention)
+    void bucketObjectLockConfigurationTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket1 = genTestBucketName("bOLTest1");
         String bucket2 = genTestBucketName("bOLTest2");
         try {
             // Update object lock configuration when create bucket with object-lock enabled.
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket1).enableObjectLock().build());
             BucketObjectLockConfiguration lockConf = candyS3.getBucketObjectLockConfiguration(bucket1);
-            Assert.assertTrue(lockConf.isObjectLockEnabled());
+            Assertions.assertTrue(lockConf.isObjectLockEnabled());
 
             // Enable object retention
             candyS3.enableBucketObjectLock(bucket1, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder()
                     .retentionDays(ObjectRetentionMode.GOVERNANCE, 1)
                     .build());
             lockConf = candyS3.getBucketObjectLockConfiguration(bucket1);
-            Assert.assertTrue(lockConf.isObjectLockEnabled());
-            Assert.assertEquals(ObjectRetentionMode.GOVERNANCE, lockConf.getMode());
-            Assert.assertEquals(1, (int) lockConf.getDays());
-            Assert.assertNull(lockConf.getYears());
+            Assertions.assertTrue(lockConf.isObjectLockEnabled());
+            Assertions.assertEquals(ObjectRetentionMode.GOVERNANCE, lockConf.getMode());
+            Assertions.assertEquals(1, (int) lockConf.getDays());
+            Assertions.assertNull(lockConf.getYears());
 
             // Disable object retention
             candyS3.enableBucketObjectLock(bucket1, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder()
                     .buildWithoutRetention());
             lockConf = candyS3.getBucketObjectLockConfiguration(bucket1);
-            Assert.assertTrue(lockConf.isObjectLockEnabled());
-            Assert.assertNull(lockConf.getMode());
-            Assert.assertNull(lockConf.getDays());
-            Assert.assertNull(lockConf.getYears());
+            Assertions.assertTrue(lockConf.isObjectLockEnabled());
+            Assertions.assertNull(lockConf.getMode());
+            Assertions.assertNull(lockConf.getDays());
+            Assertions.assertNull(lockConf.getYears());
 
             // Enable and update object lock configuration when create bucket with object-lock disabled.
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket2).build());
             try {
                 candyS3.getBucketObjectLockConfiguration(bucket2);
-                Assert.fail("Should not be here. Exception should be thrown when get configuration if object-lock is disabled");
+                Assertions.fail("Should not be here. Exception should be thrown when get configuration if object-lock is disabled");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.BUCKET_OBJECT_LOCK_NOT_ENABLED.getCode());
-                Assert.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "ObjectLockConfigurationNotFoundError");
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.BUCKET_OBJECT_LOCK_NOT_ENABLED.getCode());
+                Assertions.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "ObjectLockConfigurationNotFoundError");
             }
 
             // Must enable versioning when use object-lock
@@ -388,28 +435,30 @@ class CandyS3Test {
                     .retentionYears(ObjectRetentionMode.COMPLIANCE, 2)
                     .build());
             BucketObjectLockConfiguration lockConf2 = candyS3.getBucketObjectLockConfiguration(bucket2);
-            Assert.assertTrue(lockConf2.isObjectLockEnabled());
-            Assert.assertEquals(ObjectRetentionMode.COMPLIANCE, lockConf2.getMode());
-            Assert.assertEquals(2, (int) lockConf2.getYears());
-            Assert.assertNull(lockConf2.getDays());
+            Assertions.assertTrue(lockConf2.isObjectLockEnabled());
+            Assertions.assertEquals(ObjectRetentionMode.COMPLIANCE, lockConf2.getMode());
+            Assertions.assertEquals(2, (int) lockConf2.getYears());
+            Assertions.assertNull(lockConf2.getDays());
         } finally {
             candyS3.deleteBucket(bucket1);
             candyS3.deleteBucket(bucket2);
         }
     }
 
-    void bucketPolicyTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void bucketPolicyTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("bucketPolicyTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
 
             try {
                 candyS3.getBucketPolicy(bucket);
-                Assert.fail("Should not be here. Exception should be thrown when get policy if no policy exists");
+                Assertions.fail("Should not be here. Exception should be thrown when get policy if no policy exists");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.BUCKET_NO_POLICY.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.BUCKET_NO_POLICY.getCode(), ((CandyS3Exception) ex).getCode());
             }
 
             candyS3.updateBucketPolicy(bucket, new UpdateBucketPolicyOptions().updatePolicy("{\n" +
@@ -428,8 +477,8 @@ class CandyS3Test {
                     "  }\n" +
                     "}]\n" +
                     "}"));
-            Assert.assertNotNull(candyS3.getBucketPolicy(bucket));
-            Assert.assertFalse(candyS3.getBucketPolicyStatus(bucket).isPublic());
+            Assertions.assertNotNull(candyS3.getBucketPolicy(bucket));
+            Assertions.assertFalse(candyS3.getBucketPolicyStatus(bucket).isPublic());
 
             // Must disable blockPublicPolicy in public access block configuration before put a public policy
             candyS3.updateBucketPublicAccessBlock(bucket,
@@ -445,33 +494,35 @@ class CandyS3Test {
                     "  \"Effect\": \"Allow\" \n" +
                     "}]\n" +
                     "}"));
-            Assert.assertNotNull(candyS3.getBucketPolicy(bucket));
-            Assert.assertTrue(candyS3.getBucketPolicyStatus(bucket).isPublic());
+            Assertions.assertNotNull(candyS3.getBucketPolicy(bucket));
+            Assertions.assertTrue(candyS3.getBucketPolicyStatus(bucket).isPublic());
 
             candyS3.updateBucketPolicy(bucket, new UpdateBucketPolicyOptions().removePolicy());
             try {
                 candyS3.getBucketPolicy(bucket);
-                Assert.fail("Should not be here. Exception should be thrown when get policy if no policy exists");
+                Assertions.fail("Should not be here. Exception should be thrown when get policy if no policy exists");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.BUCKET_NO_POLICY.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.BUCKET_NO_POLICY.getCode(), ((CandyS3Exception) ex).getCode());
             }
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void bucketBlockPublicAccessTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.accessBlock)
+    void bucketBlockPublicAccessTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("bucketBlockPublicAccessTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
 
             BucketPublicAccessBlock block = candyS3.getBucketPublicAccessBlock(bucket);
-            Assert.assertTrue(block.isBlockPublicAcls());
-            Assert.assertTrue(block.isBlockPublicPolicy());
-            Assert.assertTrue(block.isIgnorePublicAcls());
-            Assert.assertTrue(block.isRestrictPublicBuckets());
+            Assertions.assertTrue(block.isBlockPublicAcls());
+            Assertions.assertTrue(block.isBlockPublicPolicy());
+            Assertions.assertTrue(block.isIgnorePublicAcls());
+            Assertions.assertTrue(block.isRestrictPublicBuckets());
 
             candyS3.updateBucketPublicAccessBlock(bucket,
                     new UpdateBucketPublicAccessBlockOptions.UpdateBucketPublicAccessBlockOptionsBuilder()
@@ -479,11 +530,11 @@ class CandyS3Test {
                             .build());
             try {
                 candyS3.getBucketPublicAccessBlock(bucket);
-                Assert.fail("Should not be here. Exception should be thrown when get public access block if no public access block configuration exists");
+                Assertions.fail("Should not be here. Exception should be thrown when get public access block if no public access block configuration exists");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.BUCKET_NO_PUBLIC_ACCESS_BLOCK.getCode(), ((CandyS3Exception) ex).getCode());
-                Assert.assertEquals("NoSuchPublicAccessBlockConfiguration", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.BUCKET_NO_PUBLIC_ACCESS_BLOCK.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertEquals("NoSuchPublicAccessBlockConfiguration", ((CandyS3Exception) ex).getParsedError().getCode());
             }
 
             candyS3.updateBucketPublicAccessBlock(bucket, new UpdateBucketPublicAccessBlockOptions.UpdateBucketPublicAccessBlockOptionsBuilder()
@@ -493,17 +544,19 @@ class CandyS3Test {
                     .restrictPublicBuckets(false)
                     .build());
             BucketPublicAccessBlock block2 = candyS3.getBucketPublicAccessBlock(bucket);
-            Assert.assertTrue(block2.isBlockPublicAcls());
-            Assert.assertFalse(block2.isBlockPublicPolicy());
-            Assert.assertTrue(block2.isIgnorePublicAcls());
-            Assert.assertFalse(block2.isRestrictPublicBuckets());
+            Assertions.assertTrue(block2.isBlockPublicAcls());
+            Assertions.assertFalse(block2.isBlockPublicPolicy());
+            Assertions.assertTrue(block2.isIgnorePublicAcls());
+            Assertions.assertFalse(block2.isRestrictPublicBuckets());
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void bucketTagTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.tagging)
+    void bucketTagTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("bucketTagTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -511,55 +564,57 @@ class CandyS3Test {
             try {
                 candyS3.getBucketTag(bucket);
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.BUCKET_NO_ASSOCIATED_TAG.getCode(), ((CandyS3Exception) ex).getCode());
-                Assert.assertEquals("NoSuchTagSet", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.BUCKET_NO_ASSOCIATED_TAG.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertEquals("NoSuchTagSet", ((CandyS3Exception) ex).getParsedError().getCode());
             }
 
             candyS3.updateBucketTag(bucket, new UpdateBucketTagOptions().addTag("a", "b").addTag("b", null));
             Map<String, String> tags = candyS3.getBucketTag(bucket);
-            Assert.assertEquals(tags.size(), 2);
-            Assert.assertEquals(tags.get("a"), "b");
-            Assert.assertTrue(StringUtils.isEmpty(tags.get("b")));
+            Assertions.assertEquals(tags.size(), 2);
+            Assertions.assertEquals(tags.get("a"), "b");
+            Assertions.assertTrue(StringUtils.isEmpty(tags.get("b")));
 
             candyS3.updateBucketTag(bucket, new UpdateBucketTagOptions().removeTags());
             try {
                 candyS3.getBucketTag(bucket);
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.BUCKET_NO_ASSOCIATED_TAG.getCode(), ((CandyS3Exception) ex).getCode());
-                Assert.assertEquals("NoSuchTagSet", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.BUCKET_NO_ASSOCIATED_TAG.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertEquals("NoSuchTagSet", ((CandyS3Exception) ex).getParsedError().getCode());
             }
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void bucketSSEConfigurationTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.sse)
+    void bucketSSEConfigurationTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("bucketSSEConfigurationTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
 
             // Tencent cloud COS does not enable SSE when create bucket by default
-            if (!S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (!S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 List<ServerSideEncryptionProperties> configurations = candyS3.getBucketServerSideEncryption(bucket);
-                Assert.assertEquals(configurations.get(0).getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
+                Assertions.assertEquals(configurations.get(0).getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
             }
 
             // Tencent cloud COS: BucketKeyEnabled is not applicable if the sse algorithm is not KMS or SM4
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.updateBucketServerSideEncryption(bucket, new UpdateServerSideEncryptionOptions.UpdateServerSideEncryptionOptionsBuilder()
                         .sseAlgorithm("SM4")
                         .build());
                 List<ServerSideEncryptionProperties> configurations2 = candyS3.getBucketServerSideEncryption(bucket);
-                Assert.assertEquals(configurations2.get(0).getSseAlgorithm(), "SM4");
+                Assertions.assertEquals(configurations2.get(0).getSseAlgorithm(), "SM4");
             } else {
                 candyS3.updateBucketServerSideEncryption(bucket, new UpdateServerSideEncryptionOptions.UpdateServerSideEncryptionOptionsBuilder()
                         .sseAlgorithm(ServerSideEncryptionAlgorithm.AES256)
                         .build());
                 List<ServerSideEncryptionProperties> configurations2 = candyS3.getBucketServerSideEncryption(bucket);
-                Assert.assertEquals(configurations2.get(0).getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
+                Assertions.assertEquals(configurations2.get(0).getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
             }
 
         } finally {
@@ -567,8 +622,10 @@ class CandyS3Test {
         }
     }
 
-    void listObjectsPaginationTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listObjectsPaginationTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("listObjectsPaginationTest");
         List<String> createdObjectKeys = new ArrayList<>();
         try {
@@ -580,7 +637,7 @@ class CandyS3Test {
             }
 
             int newCount = candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size();
-            Assert.assertEquals(newCount, 10);
+            Assertions.assertEquals(newCount, 10);
 
             List<S3Object> listObjects = new ArrayList<>();
             ListPaginationResult<S3Object> result;
@@ -595,16 +652,16 @@ class CandyS3Test {
 
                 loopTime++;
                 if (loopTime * 3 < newCount) {
-                    Assert.assertTrue(listObjects.size() > lastCount);
-                    Assert.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
+                    Assertions.assertTrue(listObjects.size() > lastCount);
+                    Assertions.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
                 }
                 lastCount = listObjects.size();
             } while (StringUtils.isNotEmpty(result.getNextPaginationMarker()));
 
             int exceptedLoopTime = newCount % 3 == 0 ? newCount / 3 : newCount / 3 + 1;
-            Assert.assertEquals(exceptedLoopTime, loopTime);
-            Assert.assertEquals(newCount, listObjects.size());
-            Assert.assertTrue(StringUtils.isEmpty(listObjectOptions.getContinuationToken()));
+            Assertions.assertEquals(exceptedLoopTime, loopTime);
+            Assertions.assertEquals(newCount, listObjects.size());
+            Assertions.assertTrue(StringUtils.isEmpty(listObjectOptions.getContinuationToken()));
         } finally {
             candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
                     .addDeleteObjects(createdObjectKeys)
@@ -613,8 +670,10 @@ class CandyS3Test {
         }
     }
 
-    void listObjectsCommonPrefixTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listObjectsCommonPrefixTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("listObjectsCommonPrefixTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -631,20 +690,20 @@ class CandyS3Test {
                     new PutObjectOptions.PutObjectOptionsBuilder().build());
 
             ListPaginationResult<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions().delimiter('/'));
-            Assert.assertEquals(objects.getResults().size(), 1);
-            Assert.assertEquals(objects.getResults().get(0).getKey(), "sample.jpg");
-            Assert.assertEquals(objects.getCommonPrefixes().size(), 1);
-            Assert.assertEquals(objects.getCommonPrefixes().get(0).getPrefix(), "photos/");
+            Assertions.assertEquals(objects.getResults().size(), 1);
+            Assertions.assertEquals(objects.getResults().get(0).getKey(), "sample.jpg");
+            Assertions.assertEquals(objects.getCommonPrefixes().size(), 1);
+            Assertions.assertEquals(objects.getCommonPrefixes().get(0).getPrefix(), "photos/");
 
             objects = candyS3.listObjects(bucket, new ListObjectOptions().prefix("photos/2006/").delimiter('/'));
-            Assert.assertEquals(objects.getResults().size(), 0);
-            Assert.assertEquals(objects.getCommonPrefixes().size(), 2);
-            Assert.assertEquals(objects.getCommonPrefixes().get(0).getPrefix(), "photos/2006/February/");
-            Assert.assertEquals(objects.getCommonPrefixes().get(1).getPrefix(), "photos/2006/January/");
+            Assertions.assertEquals(objects.getResults().size(), 0);
+            Assertions.assertEquals(objects.getCommonPrefixes().size(), 2);
+            Assertions.assertEquals(objects.getCommonPrefixes().get(0).getPrefix(), "photos/2006/February/");
+            Assertions.assertEquals(objects.getCommonPrefixes().get(1).getPrefix(), "photos/2006/January/");
 
             objects = candyS3.listObjects(bucket, new ListObjectOptions().prefix("photos/2006/February/").delimiter('/'));
-            Assert.assertEquals(objects.getResults().size(), 3);
-            Assert.assertEquals(objects.getCommonPrefixes().size(), 0);
+            Assertions.assertEquals(objects.getResults().size(), 3);
+            Assertions.assertEquals(objects.getCommonPrefixes().size(), 0);
 
         } finally {
             candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
@@ -658,15 +717,17 @@ class CandyS3Test {
         }
     }
 
-    void listObjectVersionsWithoutVersioningTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void listObjectVersionsWithoutVersioningTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucketWithoutVersioning = genTestBucketName("lOVWithoutV");
         String objectKey = "listObjectVersionsWithoutVersioningTest.data";
 
         try {
             // put object in bucket without versioning, object versionId will be null
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucketWithoutVersioning).build());
-            Assert.assertFalse(candyS3.isBucketVersioning(bucketWithoutVersioning));
+            Assertions.assertFalse(candyS3.isBucketVersioning(bucketWithoutVersioning));
 
             candyS3.putObject(bucketWithoutVersioning, objectKey, new PutObjectOptions.PutObjectOptionsBuilder().build());
             candyS3.putObject(bucketWithoutVersioning, objectKey, new PutObjectOptions.PutObjectOptionsBuilder()
@@ -674,11 +735,11 @@ class CandyS3Test {
                     .build());
             ListPaginationResult<S3ObjectVersion> result =
                     candyS3.listObjectVersions(bucketWithoutVersioning, new ListObjectVersionsOptions());
-            Assert.assertEquals(result.getResults().size(), 1);
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
-                Assert.assertEquals(result.getResults().get(0).getVersionId(), "");
+            Assertions.assertEquals(result.getResults().size(), 1);
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
+                Assertions.assertEquals(result.getResults().get(0).getVersionId(), "");
             } else {
-                Assert.assertEquals(result.getResults().get(0).getVersionId(), "null");
+                Assertions.assertEquals(result.getResults().get(0).getVersionId(), "null");
             }
         } finally {
             candyS3.deleteObject(bucketWithoutVersioning, new DeleteObjectOptions(objectKey));
@@ -686,8 +747,10 @@ class CandyS3Test {
         }
     }
 
-    void listObjectVersionsTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void listObjectVersionsTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("listObjectVersionsTest2");
         String objectKey1 = "listObjectVersionsTest1.data";
         String objectKey2 = "listObjectVersionsTest2.data";
@@ -696,7 +759,7 @@ class CandyS3Test {
             // Create bucket and enable versioning
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
             candyS3.setBucketVersioning(bucket, true);
-            Assert.assertTrue(candyS3.isBucketVersioning(bucket));
+            Assertions.assertTrue(candyS3.isBucketVersioning(bucket));
 
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder().build());
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder()
@@ -713,17 +776,17 @@ class CandyS3Test {
 
             ListPaginationResult<S3ObjectVersion> result =
                     candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-            Assert.assertEquals(result.getResults().size(), 5);
+            Assertions.assertEquals(result.getResults().size(), 5);
 
             Map<String, List<S3ObjectVersion>> s3ObjectVersionsByKey = result.getResults()
                     .stream()
                     .collect(Collectors.groupingBy(S3ObjectVersion::getKey));
-            Assert.assertTrue(s3ObjectVersionsByKey.containsKey(objectKey1));
-            Assert.assertTrue(s3ObjectVersionsByKey.containsKey(objectKey2));
-            Assert.assertEquals(s3ObjectVersionsByKey.size(), 2);
+            Assertions.assertTrue(s3ObjectVersionsByKey.containsKey(objectKey1));
+            Assertions.assertTrue(s3ObjectVersionsByKey.containsKey(objectKey2));
+            Assertions.assertEquals(s3ObjectVersionsByKey.size(), 2);
 
             {
-                Assert.assertEquals(s3ObjectVersionsByKey.get(objectKey1).size(), 3);
+                Assertions.assertEquals(s3ObjectVersionsByKey.get(objectKey1).size(), 3);
                 // every object has only one version is latest
                 int objectIsLatestVersionCnt = 0;
                 int objectNotLatestVersionCnt = 0;
@@ -731,18 +794,18 @@ class CandyS3Test {
                     if (object1Version.getIsLatest() != null) {
                         if (object1Version.getIsLatest()) {
                             objectIsLatestVersionCnt++;
-                            Assert.assertEquals(object1Version.getSize(), 2);
+                            Assertions.assertEquals(object1Version.getSize(), 2);
                         } else {
                             objectNotLatestVersionCnt++;
                         }
                     }
                 }
-                Assert.assertEquals(objectIsLatestVersionCnt, 1);
-                Assert.assertEquals(objectNotLatestVersionCnt, 2);
+                Assertions.assertEquals(objectIsLatestVersionCnt, 1);
+                Assertions.assertEquals(objectNotLatestVersionCnt, 2);
             }
 
             {
-                Assert.assertEquals(s3ObjectVersionsByKey.get(objectKey2).size(), 2);
+                Assertions.assertEquals(s3ObjectVersionsByKey.get(objectKey2).size(), 2);
                 // every object has only one version is latest
                 int objectIsLatestVersionCnt = 0;
                 int objectNotLatestVersionCnt = 0;
@@ -750,24 +813,26 @@ class CandyS3Test {
                     if (object1Version.getIsLatest() != null) {
                         if (object1Version.getIsLatest()) {
                             objectIsLatestVersionCnt++;
-                            Assert.assertEquals(object1Version.getSize(), 1);
+                            Assertions.assertEquals(object1Version.getSize(), 1);
                         } else {
                             objectNotLatestVersionCnt++;
                         }
                     }
                 }
-                Assert.assertEquals(objectIsLatestVersionCnt, 1);
-                Assert.assertEquals(objectNotLatestVersionCnt, 1);
+                Assertions.assertEquals(objectIsLatestVersionCnt, 1);
+                Assertions.assertEquals(objectNotLatestVersionCnt, 1);
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void listObjectVersionsPaginationTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void listObjectVersionsPaginationTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("lOVPTest");
         String objectKey1 = "listObjectVersionsPaginationTest1.data";
         String objectKey2 = "listObjectVersionsPaginationTest2.data";
@@ -776,7 +841,7 @@ class CandyS3Test {
             // Create bucket and enable versioning
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
             candyS3.setBucketVersioning(bucket, true);
-            Assert.assertTrue(candyS3.isBucketVersioning(bucket));
+            Assertions.assertTrue(candyS3.isBucketVersioning(bucket));
 
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder().build());
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder()
@@ -807,25 +872,27 @@ class CandyS3Test {
 
                 loopTime++;
                 if (loopTime * 2 < objectVersionsCount) {
-                    Assert.assertTrue(listObjectVersions.size() > lastCount);
-                    Assert.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
-                    Assert.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker2()));
+                    Assertions.assertTrue(listObjectVersions.size() > lastCount);
+                    Assertions.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
+                    Assertions.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker2()));
                 }
                 lastCount = listObjectVersions.size();
             } while (StringUtils.isNotEmpty(result.getNextPaginationMarker()) || StringUtils.isNotEmpty(result.getNextPaginationMarker2()));
 
-            Assert.assertEquals(objectVersionsCount, listObjectVersions.size());
-            Assert.assertTrue(StringUtils.isEmpty(listObjectVersionsOptions.getKeyMarker()));
-            Assert.assertTrue(StringUtils.isEmpty(listObjectVersionsOptions.getVersionIdMarker()));
+            Assertions.assertEquals(objectVersionsCount, listObjectVersions.size());
+            Assertions.assertTrue(StringUtils.isEmpty(listObjectVersionsOptions.getKeyMarker()));
+            Assertions.assertTrue(StringUtils.isEmpty(listObjectVersionsOptions.getVersionIdMarker()));
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void listObjectVersionsCommonPrefixTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void listObjectVersionsCommonPrefixTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("lOVCPrefix");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -843,34 +910,36 @@ class CandyS3Test {
 
             ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket,
                     new ListObjectVersionsOptions().delimiter('/'));
-            Assert.assertEquals(objectVersions.getResults().size(), 1);
-            Assert.assertEquals(objectVersions.getResults().get(0).getKey(), "sample.jpg");
-            Assert.assertEquals(objectVersions.getCommonPrefixes().size(), 2);
-            Assert.assertEquals(objectVersions.getCommonPrefixes().get(0).getPrefix(), "photos/");
-            Assert.assertEquals(objectVersions.getCommonPrefixes().get(1).getPrefix(), "videos/");
+            Assertions.assertEquals(objectVersions.getResults().size(), 1);
+            Assertions.assertEquals(objectVersions.getResults().get(0).getKey(), "sample.jpg");
+            Assertions.assertEquals(objectVersions.getCommonPrefixes().size(), 2);
+            Assertions.assertEquals(objectVersions.getCommonPrefixes().get(0).getPrefix(), "photos/");
+            Assertions.assertEquals(objectVersions.getCommonPrefixes().get(1).getPrefix(), "videos/");
 
             objectVersions = candyS3.listObjectVersions(bucket,
                     new ListObjectVersionsOptions().prefix("photos/2006/").delimiter('/'));
-            Assert.assertEquals(objectVersions.getResults().size(), 0);
-            Assert.assertEquals(objectVersions.getCommonPrefixes().size(), 3);
-            Assert.assertEquals(objectVersions.getCommonPrefixes().get(0).getPrefix(), "photos/2006/February/");
-            Assert.assertEquals(objectVersions.getCommonPrefixes().get(1).getPrefix(), "photos/2006/January/");
-            Assert.assertEquals(objectVersions.getCommonPrefixes().get(2).getPrefix(), "photos/2006/March/");
+            Assertions.assertEquals(objectVersions.getResults().size(), 0);
+            Assertions.assertEquals(objectVersions.getCommonPrefixes().size(), 3);
+            Assertions.assertEquals(objectVersions.getCommonPrefixes().get(0).getPrefix(), "photos/2006/February/");
+            Assertions.assertEquals(objectVersions.getCommonPrefixes().get(1).getPrefix(), "photos/2006/January/");
+            Assertions.assertEquals(objectVersions.getCommonPrefixes().get(2).getPrefix(), "photos/2006/March/");
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void getVersioningObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void getVersioningObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("getVersioningObjectTest");
         try {
             // Create bucket and enable versioning
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
             candyS3.setBucketVersioning(bucket, true);
-            Assert.assertTrue(candyS3.isBucketVersioning(bucket));
+            Assertions.assertTrue(candyS3.isBucketVersioning(bucket));
 
             String objectKey = "getVersioningObjectTest.data";
             candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder()
@@ -884,7 +953,7 @@ class CandyS3Test {
                 S3Object s3ObjectLatest = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                         .configureDataOutput().toBytes().endConfigureDataOutput()
                         .build());
-                Assert.assertArrayEquals(new byte[]{1, 2}, s3ObjectLatest.getContentBytes());
+                Assertions.assertArrayEquals(new byte[]{1, 2}, s3ObjectLatest.getContentBytes());
             }
 
             ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions().prefix(objectKey));
@@ -894,7 +963,7 @@ class CandyS3Test {
                         .versionId(objectVersions.getResults().get(1).getVersionId())
                         .configureDataOutput().toBytes().endConfigureDataOutput()
                         .build());
-                Assert.assertArrayEquals(new byte[]{1}, s3ObjectV1.getContentBytes());
+                Assertions.assertArrayEquals(new byte[]{1}, s3ObjectV1.getContentBytes());
             }
 
 
@@ -907,10 +976,10 @@ class CandyS3Test {
                     candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .build());
-                    Assert.fail("Should not be here. A 404 (Not Found) error should be thrown.");
+                    Assertions.fail("Should not be here. A 404 (Not Found) error should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.NO_SUCH_OBJECT.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.NO_SUCH_OBJECT.getCode(), ((CandyS3Exception) ex).getCode());
                 }
             }
 
@@ -923,13 +992,13 @@ class CandyS3Test {
                             .versionId(objectVersions.getDeleteMarkers().get(0).getVersionId())
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .build());
-                    Assert.fail("Should not be here. A 405 (Method Not Allowed) error should be thrown.");
+                    Assertions.fail("Should not be here. A 405 (Method Not Allowed) error should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
-                        Assert.assertEquals(CommonErrorCode.NO_SUCH_OBJECT.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
+                        Assertions.assertEquals(CommonErrorCode.NO_SUCH_OBJECT.getCode(), ((CandyS3Exception) ex).getCode());
                     } else {
-                        Assert.assertEquals("MethodNotAllowed", ((CandyS3Exception) ex).getParsedError().getCode());
+                        Assertions.assertEquals("MethodNotAllowed", ((CandyS3Exception) ex).getParsedError().getCode());
                     }
                 }
             }
@@ -940,18 +1009,20 @@ class CandyS3Test {
                         .versionId(objectVersions.getResults().get(1).getVersionId())
                         .configureDataOutput().toBytes().endConfigureDataOutput()
                         .build());
-                Assert.assertArrayEquals(new byte[]{1}, s3ObjectVersionV1.getContentBytes());
+                Assertions.assertArrayEquals(new byte[]{1}, s3ObjectVersionV1.getContentBytes());
             }
 
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void getObjectVersionMetadataTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void getObjectVersionMetadataTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("gOVMTest");
         String objectKey = "getObjectVersionMetadataTest.data";
         byte[] bytesV1 = "x".getBytes(StandardCharsets.UTF_8);
@@ -1003,18 +1074,18 @@ class CandyS3Test {
                     S3Object s3ObjectCurVersion = candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
                     S3Object.S3ObjectMetadata objectMetadataCurVersion = s3ObjectCurVersion.getObjectMetadata();
 
-                    Assert.assertNull(s3ObjectCurVersion.getContentBytes());
-                    Assert.assertNotNull(s3ObjectCurVersion.getObjectMetadata());
+                    Assertions.assertNull(s3ObjectCurVersion.getContentBytes());
+                    Assertions.assertNotNull(s3ObjectCurVersion.getObjectMetadata());
 
-                    Assert.assertEquals(s3ObjectCurVersion.getSize(), bytesV2.length);
+                    Assertions.assertEquals(s3ObjectCurVersion.getSize(), bytesV2.length);
 
-                    Assert.assertEquals(objectMetadataCurVersion.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadataCurVersion.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadataCurVersion.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadataCurVersion.getContentLanguage(), "en, zh-CN");
-                    Assert.assertEquals(objectMetadataCurVersion.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadataCurVersion.getExpires().after(new Date(expiresDate2.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadataCurVersion.getExpires().before(new Date(expiresDate2.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadataCurVersion.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadataCurVersion.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadataCurVersion.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadataCurVersion.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertEquals(objectMetadataCurVersion.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadataCurVersion.getExpires().after(new Date(expiresDate2.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadataCurVersion.getExpires().before(new Date(expiresDate2.getTime() + 1000)));
                 }
 
                 // object version 1
@@ -1023,18 +1094,18 @@ class CandyS3Test {
                             .versionId(versionId1).build());
                     S3Object.S3ObjectMetadata objectMetadataV1 = s3ObjectV1.getObjectMetadata();
 
-                    Assert.assertNull(s3ObjectV1.getContentBytes());
-                    Assert.assertNotNull(s3ObjectV1.getObjectMetadata());
+                    Assertions.assertNull(s3ObjectV1.getContentBytes());
+                    Assertions.assertNotNull(s3ObjectV1.getObjectMetadata());
 
-                    Assert.assertEquals(s3ObjectV1.getSize(), bytesV1.length);
+                    Assertions.assertEquals(s3ObjectV1.getSize(), bytesV1.length);
 
-                    Assert.assertEquals(objectMetadataV1.getCacheControl(), "public, max-age=1");
-                    Assert.assertEquals(objectMetadataV1.getContentDisposition(), "attachment; filename=\"thisisaattachment-1.html\"");
-                    Assert.assertEquals(objectMetadataV1.getContentEncoding(), "gzip");
-                    Assert.assertEquals(objectMetadataV1.getContentLanguage(), "en");
-                    Assert.assertEquals(objectMetadataV1.getContentType(), "text/plain");
-                    Assert.assertTrue(objectMetadataV1.getExpires().after(new Date(expiresDate1.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadataV1.getExpires().before(new Date(expiresDate1.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadataV1.getCacheControl(), "public, max-age=1");
+                    Assertions.assertEquals(objectMetadataV1.getContentDisposition(), "attachment; filename=\"thisisaattachment-1.html\"");
+                    Assertions.assertEquals(objectMetadataV1.getContentEncoding(), "gzip");
+                    Assertions.assertEquals(objectMetadataV1.getContentLanguage(), "en");
+                    Assertions.assertEquals(objectMetadataV1.getContentType(), "text/plain");
+                    Assertions.assertTrue(objectMetadataV1.getExpires().after(new Date(expiresDate1.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadataV1.getExpires().before(new Date(expiresDate1.getTime() + 1000)));
                 }
 
                 // object version 2 which is the latest version
@@ -1043,18 +1114,18 @@ class CandyS3Test {
                             .versionId(versionId2).build());
                     S3Object.S3ObjectMetadata objectMetadataV2 = s3ObjectV2.getObjectMetadata();
 
-                    Assert.assertNull(s3ObjectV2.getContentBytes());
-                    Assert.assertNotNull(s3ObjectV2.getObjectMetadata());
+                    Assertions.assertNull(s3ObjectV2.getContentBytes());
+                    Assertions.assertNotNull(s3ObjectV2.getObjectMetadata());
 
-                    Assert.assertEquals(s3ObjectV2.getSize(), bytesV2.length);
+                    Assertions.assertEquals(s3ObjectV2.getSize(), bytesV2.length);
 
-                    Assert.assertEquals(objectMetadataV2.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadataV2.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadataV2.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadataV2.getContentLanguage(), "en, zh-CN");
-                    Assert.assertEquals(objectMetadataV2.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadataV2.getExpires().after(new Date(expiresDate2.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadataV2.getExpires().before(new Date(expiresDate2.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadataV2.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadataV2.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadataV2.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadataV2.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertEquals(objectMetadataV2.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadataV2.getExpires().after(new Date(expiresDate2.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadataV2.getExpires().before(new Date(expiresDate2.getTime() + 1000)));
                 }
             }
 
@@ -1078,13 +1149,13 @@ class CandyS3Test {
                     // If the current version of the object is a delete marker, Amazon S3 behaves as if the object was deleted and includes x-amz-delete-marker: true in the response.
                     try {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
-                        Assert.fail("Should not be here. A 404 (Not Found) error should be thrown.");
+                        Assertions.fail("Should not be here. A 404 (Not Found) error should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
-                            Assert.assertEquals(CommonErrorCode.NO_SUCH_OBJECT.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
+                            Assertions.assertEquals(CommonErrorCode.NO_SUCH_OBJECT.getCode(), ((CandyS3Exception) ex).getCode());
                         } else {
-                            Assert.assertEquals(CommonErrorCode.OBJECT_VERSION_IS_DELETE_MARKER.getCode(), ((CandyS3Exception) ex).getCode());
+                            Assertions.assertEquals(CommonErrorCode.OBJECT_VERSION_IS_DELETE_MARKER.getCode(), ((CandyS3Exception) ex).getCode());
                         }
                     }
                 }
@@ -1095,13 +1166,13 @@ class CandyS3Test {
                     try {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .versionId(versionIdDeleteMarker).build());
-                        Assert.fail("Should not be here. A 405 (Method Not Allowed) error should be thrown.");
+                        Assertions.fail("Should not be here. A 405 (Method Not Allowed) error should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
-                            Assert.assertEquals(CommonErrorCode.OBJECT_VERSION_IS_DELETE_MARKER.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
+                            Assertions.assertEquals(CommonErrorCode.OBJECT_VERSION_IS_DELETE_MARKER.getCode(), ((CandyS3Exception) ex).getCode());
                         } else {
-                            Assert.assertEquals("Method Not Allowed", ((CandyS3Exception) ex).getParsedError().getMessage());
+                            Assertions.assertEquals("Method Not Allowed", ((CandyS3Exception) ex).getParsedError().getMessage());
                         }
                     }
                 }
@@ -1112,18 +1183,18 @@ class CandyS3Test {
                             .versionId(versionId2).build());
                     S3Object.S3ObjectMetadata objectMetadataV2 = s3ObjectV2.getObjectMetadata();
 
-                    Assert.assertNull(s3ObjectV2.getContentBytes());
-                    Assert.assertNotNull(s3ObjectV2.getObjectMetadata());
+                    Assertions.assertNull(s3ObjectV2.getContentBytes());
+                    Assertions.assertNotNull(s3ObjectV2.getObjectMetadata());
 
-                    Assert.assertEquals(s3ObjectV2.getSize(), bytesV2.length);
+                    Assertions.assertEquals(s3ObjectV2.getSize(), bytesV2.length);
 
-                    Assert.assertEquals(objectMetadataV2.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadataV2.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadataV2.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadataV2.getContentLanguage(), "en, zh-CN");
-                    Assert.assertEquals(objectMetadataV2.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadataV2.getExpires().after(new Date(expiresDate2.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadataV2.getExpires().before(new Date(expiresDate2.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadataV2.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadataV2.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadataV2.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadataV2.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertEquals(objectMetadataV2.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadataV2.getExpires().after(new Date(expiresDate2.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadataV2.getExpires().before(new Date(expiresDate2.getTime() + 1000)));
                 }
 
                 {
@@ -1132,36 +1203,38 @@ class CandyS3Test {
                             .versionId(versionId1).build());
                     S3Object.S3ObjectMetadata objectMetadataV1 = s3ObjectV1.getObjectMetadata();
 
-                    Assert.assertNull(s3ObjectV1.getContentBytes());
-                    Assert.assertNotNull(s3ObjectV1.getObjectMetadata());
+                    Assertions.assertNull(s3ObjectV1.getContentBytes());
+                    Assertions.assertNotNull(s3ObjectV1.getObjectMetadata());
 
-                    Assert.assertEquals(s3ObjectV1.getSize(), bytesV1.length);
+                    Assertions.assertEquals(s3ObjectV1.getSize(), bytesV1.length);
 
-                    Assert.assertEquals(objectMetadataV1.getCacheControl(), "public, max-age=1");
-                    Assert.assertEquals(objectMetadataV1.getContentDisposition(), "attachment; filename=\"thisisaattachment-1.html\"");
-                    Assert.assertEquals(objectMetadataV1.getContentEncoding(), "gzip");
-                    Assert.assertEquals(objectMetadataV1.getContentLanguage(), "en");
-                    Assert.assertEquals(objectMetadataV1.getContentType(), "text/plain");
-                    Assert.assertTrue(objectMetadataV1.getExpires().after(new Date(expiresDate1.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadataV1.getExpires().before(new Date(expiresDate1.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadataV1.getCacheControl(), "public, max-age=1");
+                    Assertions.assertEquals(objectMetadataV1.getContentDisposition(), "attachment; filename=\"thisisaattachment-1.html\"");
+                    Assertions.assertEquals(objectMetadataV1.getContentEncoding(), "gzip");
+                    Assertions.assertEquals(objectMetadataV1.getContentLanguage(), "en");
+                    Assertions.assertEquals(objectMetadataV1.getContentType(), "text/plain");
+                    Assertions.assertTrue(objectMetadataV1.getExpires().after(new Date(expiresDate1.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadataV1.getExpires().before(new Date(expiresDate1.getTime() + 1000)));
                 }
 
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void deleteVersioningObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void deleteVersioningObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("deleteVersioningObjectTest");
         try {
             // Create bucket and enable versioning
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
             candyS3.setBucketVersioning(bucket, true);
-            Assert.assertTrue(candyS3.isBucketVersioning(bucket));
+            Assertions.assertTrue(candyS3.isBucketVersioning(bucket));
 
             {
                 String objectKey1 = "deleteVersioningObjectTest1.data";
@@ -1172,13 +1245,13 @@ class CandyS3Test {
                         .build());
 
                 ListPaginationResult<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions());
-                Assert.assertEquals(objects.getResults().size(), 1);
+                Assertions.assertEquals(objects.getResults().size(), 1);
 
                 ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
-                Assert.assertTrue(objectVersions.getDeleteMarkers().isEmpty());
+                Assertions.assertEquals(objectVersions.getResults().size(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
+                Assertions.assertTrue(objectVersions.getDeleteMarkers().isEmpty());
 
 
                 // Delete object without version id, will create a deleteMarker
@@ -1186,29 +1259,29 @@ class CandyS3Test {
 
                 // ListObject will not return the object
                 objects = candyS3.listObjects(bucket, new ListObjectOptions());
-                Assert.assertEquals(objects.getResults().size(), 0);
+                Assertions.assertEquals(objects.getResults().size(), 0);
 
                 // ListObjectVersion will return the object's all versions and deleteMarkers
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().get(0).getSize(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().get(0).getSize(), 0);
 
                 // When delete the deleteMarker with versionId, the object latest version will be retained
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1).versionId(objectVersions.getDeleteMarkers().get(0).getVersionId()));
                 objects = candyS3.listObjects(bucket, new ListObjectOptions());
-                Assert.assertEquals(objects.getResults().size(), 1);
-                Assert.assertEquals(objects.getResults().get(0).getSize(), 2);
+                Assertions.assertEquals(objects.getResults().size(), 1);
+                Assertions.assertEquals(objects.getResults().get(0).getSize(), 2);
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
             {
@@ -1224,30 +1297,30 @@ class CandyS3Test {
 
                 // ListObject will not return the object
                 ListPaginationResult<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions());
-                Assert.assertEquals(objects.getResults().size(), 0);
+                Assertions.assertEquals(objects.getResults().size(), 0);
 
                 // ListObjectVersion will return the object's all versions and deleteMarkers
                 ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().get(0).getSize(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().get(0).getSize(), 0);
 
                 // When delete the deleteMarker without versionId, removes nothing, but instead adds an additional delete marker
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey2));
                 objects = candyS3.listObjects(bucket, new ListObjectOptions());
-                Assert.assertEquals(objects.getResults().size(), 0);
+                Assertions.assertEquals(objects.getResults().size(), 0);
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 2);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().get(0).getSize(), 0);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().get(1).getSize(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 2);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().get(0).getSize(), 0);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().get(1).getSize(), 0);
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
 
@@ -1260,13 +1333,13 @@ class CandyS3Test {
                         .build());
 
                 ListPaginationResult<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions());
-                Assert.assertEquals(objects.getResults().size(), 1);
+                Assertions.assertEquals(objects.getResults().size(), 1);
 
                 ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
-                Assert.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
-                Assert.assertTrue(objectVersions.getDeleteMarkers().isEmpty());
+                Assertions.assertEquals(objectVersions.getResults().size(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(0).getSize(), 2);
+                Assertions.assertEquals(objectVersions.getResults().get(1).getSize(), 1);
+                Assertions.assertTrue(objectVersions.getDeleteMarkers().isEmpty());
 
 
                 // Delete object with version id, will remove the version without creating a deleteMarker
@@ -1274,13 +1347,13 @@ class CandyS3Test {
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey3).versionId(objectVersions.getResults().get(1).getVersionId()));
 
                 objects = candyS3.listObjects(bucket, new ListObjectOptions());
-                Assert.assertEquals(objects.getResults().size(), 0);
+                Assertions.assertEquals(objects.getResults().size(), 0);
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 0);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 0);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
 
@@ -1289,8 +1362,10 @@ class CandyS3Test {
         }
     }
 
-    void putDownloadEmptyObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void putDownloadEmptyObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putDownloadEmptyObjectTest");
         String objectKey = "putDownloadEmptyObjectTest.data";
         try {
@@ -1298,14 +1373,14 @@ class CandyS3Test {
             candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder().build());
             ListPaginationResult<S3Object> result =
                     candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey).maxKeys(1));
-            Assert.assertEquals(result.getResults().get(0).getKey(), objectKey);
-            Assert.assertEquals(result.getResults().get(0).getSize(), 0);
+            Assertions.assertEquals(result.getResults().get(0).getKey(), objectKey);
+            Assertions.assertEquals(result.getResults().get(0).getSize(), 0);
 
             S3Object downloadObject = candyS3.downloadObject(bucket, objectKey,
                     new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .build());
-            Assert.assertEquals(0, downloadObject.getContentBytes().length);
+            Assertions.assertEquals(0, downloadObject.getContentBytes().length);
 
         } finally {
             candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey));
@@ -1313,8 +1388,10 @@ class CandyS3Test {
         }
     }
 
-    void putDownloadSmallObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void putDownloadSmallObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putDownloadSmallObjectTest");
         File file = new File("./temp/tempFile.data");
         String content = StringUtils.repeat("x", 1024);
@@ -1330,14 +1407,14 @@ class CandyS3Test {
                         .build());
                 ListPaginationResult<S3Object> result =
                         candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey1).maxKeys(1));
-                Assert.assertEquals(result.getResults().get(0).getKey(), objectKey1);
-                Assert.assertEquals(result.getResults().get(0).getSize(), 1024);
+                Assertions.assertEquals(result.getResults().get(0).getKey(), objectKey1);
+                Assertions.assertEquals(result.getResults().get(0).getSize(), 1024);
 
                 S3Object downloadObject1 = candyS3.downloadObject(bucket, objectKey1,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertArrayEquals(bytes, downloadObject1.getContentBytes());
+                Assertions.assertArrayEquals(bytes, downloadObject1.getContentBytes());
 
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1));
             }
@@ -1355,14 +1432,14 @@ class CandyS3Test {
                         .build());
                 ListPaginationResult<S3Object> result4 =
                         candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey4).maxKeys(1));
-                Assert.assertEquals(result4.getResults().get(0).getKey(), objectKey4);
-                Assert.assertEquals(result4.getResults().get(0).getSize(), 1024);
+                Assertions.assertEquals(result4.getResults().get(0).getKey(), objectKey4);
+                Assertions.assertEquals(result4.getResults().get(0).getSize(), 1024);
 
                 S3Object downloadObject4 = candyS3.downloadObject(bucket, objectKey4,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertArrayEquals(bytes, downloadObject4.getContentBytes());
+                Assertions.assertArrayEquals(bytes, downloadObject4.getContentBytes());
 
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey4));
             }
@@ -1374,14 +1451,14 @@ class CandyS3Test {
                         .build());
                 ListPaginationResult<S3Object> result6 =
                         candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey6).maxKeys(1));
-                Assert.assertEquals(result6.getResults().get(0).getKey(), objectKey6);
-                Assert.assertEquals(result6.getResults().get(0).getSize(), 1024);
+                Assertions.assertEquals(result6.getResults().get(0).getKey(), objectKey6);
+                Assertions.assertEquals(result6.getResults().get(0).getSize(), 1024);
 
                 S3Object downloadObject6 = candyS3.downloadObject(bucket, objectKey6,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertArrayEquals(bytes, downloadObject6.getContentBytes());
+                Assertions.assertArrayEquals(bytes, downloadObject6.getContentBytes());
 
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey6));
             }
@@ -1393,8 +1470,10 @@ class CandyS3Test {
         }
     }
 
-    void putDownloadLargeObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void putDownloadLargeObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putDownloadLargeObjectTest");
         File file = new File("./temp/tempFile.data");
         String content = StringUtils.repeat("x", 6 * 1024 * 1024); // 6MB
@@ -1411,14 +1490,14 @@ class CandyS3Test {
                         .build());
                 ListPaginationResult<S3Object> result2 =
                         candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey2).maxKeys(1));
-                Assert.assertEquals(result2.getResults().get(0).getKey(), objectKey2);
-                Assert.assertEquals(result2.getResults().get(0).getSize(), 6 * 1024 * 1024);
+                Assertions.assertEquals(result2.getResults().get(0).getKey(), objectKey2);
+                Assertions.assertEquals(result2.getResults().get(0).getSize(), 6 * 1024 * 1024);
 
                 S3Object downloadObject2 = candyS3.downloadObject(bucket, objectKey2,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertArrayEquals(bytes, downloadObject2.getContentBytes());
+                Assertions.assertArrayEquals(bytes, downloadObject2.getContentBytes());
 
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey2));
             }
@@ -1439,14 +1518,14 @@ class CandyS3Test {
                         .build());
                 ListPaginationResult<S3Object> result4 =
                         candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey4).maxKeys(1));
-                Assert.assertEquals(result4.getResults().get(0).getKey(), objectKey4);
-                Assert.assertEquals(result4.getResults().get(0).getSize(), 6 * 1024 * 1024);
+                Assertions.assertEquals(result4.getResults().get(0).getKey(), objectKey4);
+                Assertions.assertEquals(result4.getResults().get(0).getSize(), 6 * 1024 * 1024);
 
                 S3Object downloadObject4 = candyS3.downloadObject(bucket, objectKey4,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertArrayEquals(bytes, downloadObject4.getContentBytes());
+                Assertions.assertArrayEquals(bytes, downloadObject4.getContentBytes());
 
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey4));
             }
@@ -1461,14 +1540,14 @@ class CandyS3Test {
                         .build());
                 ListPaginationResult<S3Object> result6 =
                         candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey6).maxKeys(1));
-                Assert.assertEquals(result6.getResults().get(0).getKey(), objectKey6);
-                Assert.assertEquals(result6.getResults().get(0).getSize(), 6 * 1024 * 1024);
+                Assertions.assertEquals(result6.getResults().get(0).getKey(), objectKey6);
+                Assertions.assertEquals(result6.getResults().get(0).getSize(), 6 * 1024 * 1024);
 
                 S3Object downloadObject6 = candyS3.downloadObject(bucket, objectKey6,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertArrayEquals(bytes, downloadObject6.getContentBytes());
+                Assertions.assertArrayEquals(bytes, downloadObject6.getContentBytes());
 
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey6));
             }
@@ -1480,8 +1559,10 @@ class CandyS3Test {
         }
     }
 
-    void multipartUploadDownloadTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void multipartUploadDownloadTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("multipartUploadDownloadTest");
         File file = new File("./temp/tempFile.data");
         File filePart1 = new File("./temp/tempFilePart1.data");
@@ -1516,15 +1597,15 @@ class CandyS3Test {
                             new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder().build());
                     ListPaginationResult<S3Object> result1 =
                             candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey1).maxKeys(1));
-                    Assert.assertEquals(result1.getResults().get(0).getKey(), objectKey1);
-                    Assert.assertEquals(result1.getResults().get(0).getSize(), 6 * 1024 * 1024);
+                    Assertions.assertEquals(result1.getResults().get(0).getKey(), objectKey1);
+                    Assertions.assertEquals(result1.getResults().get(0).getSize(), 6 * 1024 * 1024);
 
                     candyS3.downloadObject(bucket, objectKey1,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                     .configureDataOutput().toFile(outputFile, true).endConfigureDataOutput()
                                     .build());
                     byte[] downloadContent = Files.readAllBytes(Paths.get(outputFile));
-                    Assert.assertArrayEquals(bytes, downloadContent);
+                    Assertions.assertArrayEquals(bytes, downloadContent);
                 } catch (Exception ex) {
                     candyS3.abortMultipartUpload(bucket, objectKey1, uploadId1,
                             new AbortMultipartUploadOptions());
@@ -1579,15 +1660,15 @@ class CandyS3Test {
                             new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder().build());
                     ListPaginationResult<S3Object> result3 =
                             candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey3).maxKeys(1));
-                    Assert.assertEquals(result3.getResults().get(0).getKey(), objectKey3);
-                    Assert.assertEquals(result3.getResults().get(0).getSize(), 6 * 1024 * 1024);
+                    Assertions.assertEquals(result3.getResults().get(0).getKey(), objectKey3);
+                    Assertions.assertEquals(result3.getResults().get(0).getSize(), 6 * 1024 * 1024);
 
                     candyS3.downloadObject(bucket, objectKey3,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                     .configureDataOutput().toFile(outputFile, true).endConfigureDataOutput()
                                     .build());
                     byte[] downloadContent = Files.readAllBytes(Paths.get(outputFile));
-                    Assert.assertArrayEquals(bytes, downloadContent);
+                    Assertions.assertArrayEquals(bytes, downloadContent);
                 } catch (Exception ex) {
                     candyS3.abortMultipartUpload(bucket, objectKey3, uploadId3,
                             new AbortMultipartUploadOptions());
@@ -1622,15 +1703,15 @@ class CandyS3Test {
                             new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder().build());
                     ListPaginationResult<S3Object> result5 =
                             candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey5).maxKeys(1));
-                    Assert.assertEquals(result5.getResults().get(0).getKey(), objectKey5);
-                    Assert.assertEquals(result5.getResults().get(0).getSize(), 6 * 1024 * 1024);
+                    Assertions.assertEquals(result5.getResults().get(0).getKey(), objectKey5);
+                    Assertions.assertEquals(result5.getResults().get(0).getSize(), 6 * 1024 * 1024);
 
                     candyS3.downloadObject(bucket, objectKey5,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                     .configureDataOutput().toFile(outputFile, true).endConfigureDataOutput()
                                     .build());
                     byte[] downloadContent = Files.readAllBytes(Paths.get(outputFile));
-                    Assert.assertArrayEquals(bytes, downloadContent);
+                    Assertions.assertArrayEquals(bytes, downloadContent);
                 } catch (Exception ex) {
                     candyS3.abortMultipartUpload(bucket, objectKey5, uploadId5,
                             new AbortMultipartUploadOptions());
@@ -1646,8 +1727,10 @@ class CandyS3Test {
         }
     }
 
-    void multipartUploadToExistsObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void multipartUploadToExistsObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("mpUToExistsOTest");
         String objectKey = "multipartUploadToExistsObjectTest.data";
         try {
@@ -1680,17 +1763,17 @@ class CandyS3Test {
             candyS3.completeMultipartUpload(bucket, objectKey, uploadId, parts, new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder().build());
 
             ListPaginationResult<S3MultipartUpload> uploads = candyS3.listMultipartUploads(bucket, new ListMultipartUploadOptions());
-            Assert.assertEquals(uploads.getResults().size(), 0);
+            Assertions.assertEquals(uploads.getResults().size(), 0);
 
             ListPaginationResult<S3Object> findObjects = candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey));
-            Assert.assertEquals(findObjects.getResults().size(), 1);
+            Assertions.assertEquals(findObjects.getResults().size(), 1);
 
             S3Object downloadObject = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                     .configureDataOutput().toBytes().endConfigureDataOutput()
                     .build());
 
             byte[] expectedBytes = (content1 + content2).getBytes(StandardCharsets.UTF_8);
-            Assert.assertArrayEquals(expectedBytes, downloadObject.getContentBytes());
+            Assertions.assertArrayEquals(expectedBytes, downloadObject.getContentBytes());
 
         } finally {
             candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey));
@@ -1698,8 +1781,10 @@ class CandyS3Test {
         }
     }
 
-    void abortMultipartUploadTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void abortMultipartUploadTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("abortMultipartUploadTest");
         String objectKey = "abortMultipartUploadTest.data";
         String content = StringUtils.repeat("x", 6 * 1024 * 1024); // 6MB
@@ -1727,27 +1812,29 @@ class CandyS3Test {
 
             ListPaginationResult<S3MultipartUpload> uploads1 = candyS3.listMultipartUploads(bucket,
                     new ListMultipartUploadOptions());
-            Assert.assertEquals(uploads1.getResults().size(), 1);
-            Assert.assertEquals(uploads1.getResults().get(0).getKey(), objectKey);
-            Assert.assertEquals(uploads1.getResults().get(0).getUploadId(), uploadId);
+            Assertions.assertEquals(uploads1.getResults().size(), 1);
+            Assertions.assertEquals(uploads1.getResults().get(0).getKey(), objectKey);
+            Assertions.assertEquals(uploads1.getResults().get(0).getUploadId(), uploadId);
 
             candyS3.abortMultipartUpload(bucket, objectKey, uploadId,
                     new AbortMultipartUploadOptions());
 
             ListPaginationResult<S3MultipartUpload> uploads2 = candyS3.listMultipartUploads(bucket,
                     new ListMultipartUploadOptions());
-            Assert.assertEquals(uploads2.getResults().size(), 0);
+            Assertions.assertEquals(uploads2.getResults().size(), 0);
 
             // object is not created when abortMultipartUpload
             ListPaginationResult<S3Object> createdObjects = candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey));
-            Assert.assertEquals(createdObjects.getResults().size(), 0);
+            Assertions.assertEquals(createdObjects.getResults().size(), 0);
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void abortMultipartUploadToExistsObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void abortMultipartUploadToExistsObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("mpUToExistsOTest");
         String objectKey = "multipartUploadToExistsObjectTest.data";
         try {
@@ -1777,15 +1864,15 @@ class CandyS3Test {
             candyS3.abortMultipartUpload(bucket, objectKey, uploadId, new AbortMultipartUploadOptions());
 
             ListPaginationResult<S3MultipartUpload> uploads = candyS3.listMultipartUploads(bucket, new ListMultipartUploadOptions());
-            Assert.assertEquals(uploads.getResults().size(), 0);
+            Assertions.assertEquals(uploads.getResults().size(), 0);
 
             ListPaginationResult<S3Object> findObjects = candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey));
-            Assert.assertEquals(findObjects.getResults().size(), 1);
+            Assertions.assertEquals(findObjects.getResults().size(), 1);
 
             S3Object downloadObject = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                     .configureDataOutput().toBytes().endConfigureDataOutput()
                     .build());
-            Assert.assertArrayEquals(new byte[]{1}, downloadObject.getContentBytes());
+            Assertions.assertArrayEquals(new byte[]{1}, downloadObject.getContentBytes());
 
         } finally {
             candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey));
@@ -1793,8 +1880,10 @@ class CandyS3Test {
         }
     }
 
-    void listMultipartUploadsTest(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listMultipartUploadsTest() throws IOException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("listMultipartUploadsTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -1810,25 +1899,27 @@ class CandyS3Test {
             String objectKey2UploadId = candyS3.createMultipartUpload(bucket, objectKey2, new CreateMultipartUploadOptions.CreateMultipartUploadOptionsBuilder().build());
 
             uploads = candyS3.listMultipartUploads(bucket, new ListMultipartUploadOptions());
-            Assert.assertEquals(uploads.getResults().size(), initialCnt + 3);
+            Assertions.assertEquals(uploads.getResults().size(), initialCnt + 3);
 
             candyS3.abortMultipartUpload(bucket, objectKey1, objectKey1UploadId, new AbortMultipartUploadOptions());
 
             uploads = candyS3.listMultipartUploads(bucket, new ListMultipartUploadOptions());
-            Assert.assertEquals(uploads.getResults().size(), initialCnt + 2);
+            Assertions.assertEquals(uploads.getResults().size(), initialCnt + 2);
 
             candyS3.abortMultipartUpload(bucket, objectKey1, objectKey1UploadId2, new AbortMultipartUploadOptions());
             candyS3.abortMultipartUpload(bucket, objectKey2, objectKey2UploadId, new AbortMultipartUploadOptions());
 
             uploads = candyS3.listMultipartUploads(bucket, new ListMultipartUploadOptions());
-            Assert.assertEquals(uploads.getResults().size(), initialCnt);
+            Assertions.assertEquals(uploads.getResults().size(), initialCnt);
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void listMultipartUploadsPaginationTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listMultipartUploadsPaginationTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("lMpUPTest");
 
         List<String> createdObjectKeys = new ArrayList<>();
@@ -1857,7 +1948,7 @@ class CandyS3Test {
             }
 
             int newCount = candyS3.listMultipartUploads(bucket, new ListMultipartUploadOptions()).getResults().size();
-            Assert.assertEquals(newCount, initialCount + createdUploadIds.size());
+            Assertions.assertEquals(newCount, initialCount + createdUploadIds.size());
 
             List<S3MultipartUpload> listUploadIds = new ArrayList<>();
             ListPaginationResult<S3MultipartUpload> result;
@@ -1873,9 +1964,9 @@ class CandyS3Test {
 
                 loopTime++;
                 if (loopTime * 3 < newCount) {
-                    Assert.assertTrue(listUploadIds.size() > lastCount);
-                    Assert.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
-                    Assert.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker2()));
+                    Assertions.assertTrue(listUploadIds.size() > lastCount);
+                    Assertions.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
+                    Assertions.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker2()));
                 }
                 lastCount = listUploadIds.size();
                 // Ensure the loop can break
@@ -1884,9 +1975,9 @@ class CandyS3Test {
                 }
             } while (StringUtils.isNotEmpty(result.getNextPaginationMarker()) || StringUtils.isNotEmpty(result.getNextPaginationMarker2()));
 
-            Assert.assertEquals(newCount, listUploadIds.size());
-            Assert.assertTrue(StringUtils.isEmpty(listMultipartUploadOptions.getKeyMarker()));
-            Assert.assertTrue(StringUtils.isEmpty(listMultipartUploadOptions.getUploadIdMarker()));
+            Assertions.assertEquals(newCount, listUploadIds.size());
+            Assertions.assertTrue(StringUtils.isEmpty(listMultipartUploadOptions.getKeyMarker()));
+            Assertions.assertTrue(StringUtils.isEmpty(listMultipartUploadOptions.getUploadIdMarker()));
 
         } finally {
             for (Map<String, String> map : objectKeyUploadIdMaps) {
@@ -1899,8 +1990,10 @@ class CandyS3Test {
         }
     }
 
-    void listPartsTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listPartsTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("listPartsTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -1911,7 +2004,7 @@ class CandyS3Test {
 
             ListPaginationResult<S3Part> s3Parts = candyS3.listParts(bucket, objectKey, new ListPartsOptions(objectKeyUploadId));
             int initialCnt = s3Parts.getResults().size();
-            Assert.assertEquals(initialCnt, 0);
+            Assertions.assertEquals(initialCnt, 0);
 
             for (int i = 0; i < 3; i++) {
                 candyS3.uploadPart(bucket, objectKey, objectKeyUploadId, i + 1, new UploadPartOptions.UploadPartOptionsBuilder()
@@ -1920,7 +2013,7 @@ class CandyS3Test {
             }
 
             s3Parts = candyS3.listParts(bucket, objectKey, new ListPartsOptions(objectKeyUploadId));
-            Assert.assertEquals(s3Parts.getResults().size(), initialCnt + 3);
+            Assertions.assertEquals(s3Parts.getResults().size(), initialCnt + 3);
 
             candyS3.abortMultipartUpload(bucket, objectKey, objectKeyUploadId, new AbortMultipartUploadOptions());
         } finally {
@@ -1928,8 +2021,10 @@ class CandyS3Test {
         }
     }
 
-    void listPartsPaginationTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void listPartsPaginationTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("listPartsPaginationTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -1948,7 +2043,7 @@ class CandyS3Test {
             }
 
             int newCount = candyS3.listParts(bucket, objectKey, new ListPartsOptions(objectKeyUploadId)).getResults().size();
-            Assert.assertEquals(newCount, initialCount + createdPartNums.size());
+            Assertions.assertEquals(newCount, initialCount + createdPartNums.size());
 
             List<S3Part> listParts = new ArrayList<>();
             ListPaginationResult<S3Part> result;
@@ -1963,16 +2058,16 @@ class CandyS3Test {
 
                 loopTime++;
                 if (loopTime * 3 < newCount) {
-                    Assert.assertTrue(listParts.size() > lastCount);
-                    Assert.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
+                    Assertions.assertTrue(listParts.size() > lastCount);
+                    Assertions.assertTrue(StringUtils.isNotEmpty(result.getNextPaginationMarker()));
                 }
                 lastCount = listParts.size();
             } while (StringUtils.isNotEmpty(result.getNextPaginationMarker()));
 
             int exceptedLoopTime = newCount % 3 == 0 ? newCount / 3 : newCount / 3 + 1;
-            Assert.assertEquals(exceptedLoopTime, loopTime);
-            Assert.assertEquals(newCount, listParts.size());
-            Assert.assertNull(listPartsOptions.getStartAfterPartNumber());
+            Assertions.assertEquals(exceptedLoopTime, loopTime);
+            Assertions.assertEquals(newCount, listParts.size());
+            Assertions.assertNull(listPartsOptions.getStartAfterPartNumber());
 
             candyS3.abortMultipartUpload(bucket, objectKey, objectKeyUploadId, new AbortMultipartUploadOptions());
         } finally {
@@ -1980,8 +2075,10 @@ class CandyS3Test {
         }
     }
 
-    void putObjectWithNonEnglishKeyTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void putObjectWithNonEnglishKeyTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putOWNonEnKeyTest");
         String objectKey = "我の😯fil e.data";
         try {
@@ -1989,15 +2086,17 @@ class CandyS3Test {
             candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder().build());
             ListPaginationResult<S3Object> result =
                     candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey).maxKeys(1));
-            Assert.assertEquals(result.getResults().get(0).getKey(), objectKey);
+            Assertions.assertEquals(result.getResults().get(0).getKey(), objectKey);
         } finally {
             candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey));
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void putObjectConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void putObjectConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putObjectConditionalTest");
         String objectKey = "putObjectConditionalTest.data";
         try {
@@ -2008,17 +2107,17 @@ class CandyS3Test {
                     .build());
             ListPaginationResult<S3Object> result =
                     candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey).maxKeys(1));
-            Assert.assertEquals(result.getResults().get(0).getKey(), objectKey);
+            Assertions.assertEquals(result.getResults().get(0).getKey(), objectKey);
 
             try {
                 candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureConditionalWrite().ifNotExists().endConfigureCondition()
                         .build());
-                Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
             }
 
             String oldEtag = result.getResults().get(0).geteTag();
@@ -2029,16 +2128,16 @@ class CandyS3Test {
                     .build());
             ListPaginationResult<S3Object> result2 =
                     candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey).maxKeys(1));
-            Assert.assertNotEquals(oldEtag, result2.getResults().get(0).geteTag());
+            Assertions.assertNotEquals(oldEtag, result2.getResults().get(0).geteTag());
             try {
                 candyS3.putObject(bucket, objectKey, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureConditionalWrite().ifMatch(oldEtag).endConfigureCondition()
                         .build());
-                Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
             }
 
         } finally {
@@ -2047,8 +2146,10 @@ class CandyS3Test {
         }
     }
 
-    void multipartUploadConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void multipartUploadConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("mpUCTest");
         String objectKey = "multipartUploadConditionalTest.data";
         try {
@@ -2068,7 +2169,7 @@ class CandyS3Test {
                             .build());
             ListPaginationResult<S3Object> result =
                     candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey).maxKeys(1));
-            Assert.assertEquals(result.getResults().get(0).getKey(), objectKey);
+            Assertions.assertEquals(result.getResults().get(0).getKey(), objectKey);
 
             try {
                 String uploadId2 = candyS3.createMultipartUpload(bucket, objectKey,
@@ -2083,11 +2184,11 @@ class CandyS3Test {
                         new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder()
                                 .configureCondition().ifNotExists().endConfigureCondition()
                                 .build());
-                Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
             }
 
             String oldEtag = result.getResults().get(0).geteTag();
@@ -2107,7 +2208,7 @@ class CandyS3Test {
 
             ListPaginationResult<S3Object> result2 =
                     candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey).maxKeys(1));
-            Assert.assertNotEquals(oldEtag, result2.getResults().get(0).geteTag());
+            Assertions.assertNotEquals(oldEtag, result2.getResults().get(0).geteTag());
             try {
 
                 String uploadId4 = candyS3.createMultipartUpload(bucket, objectKey,
@@ -2122,11 +2223,11 @@ class CandyS3Test {
                         new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder()
                                 .configureCondition().ifMatch(oldEtag).endConfigureCondition()
                                 .build());
-                Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
             }
 
         } finally {
@@ -2135,8 +2236,10 @@ class CandyS3Test {
         }
     }
 
-    void putObjectPropertiesTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void putObjectPropertiesTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putObjectPropertiesTest");
         String objectKey = "putObjectPropertiesTest.data";
         byte[] bytes = "x我y".getBytes(StandardCharsets.UTF_8);
@@ -2161,18 +2264,18 @@ class CandyS3Test {
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
+                Assertions.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
             }
 
             // getObjectMetadata with range
@@ -2181,19 +2284,19 @@ class CandyS3Test {
                         .range(1, bytes.length - 2).build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), (bytes.length - 2) - 1 + 1);
+                Assertions.assertEquals(s3Object.getSize(), (bytes.length - 2) - 1 + 1);
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertEquals(objectMetadata.getContentRange(), "bytes 1-" + (bytes.length - 2) + "/" + (bytes.length));
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertEquals(objectMetadata.getContentRange(), "bytes 1-" + (bytes.length - 2) + "/" + (bytes.length));
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
             }
 
             // getObjectMetadata with condition
@@ -2206,11 +2309,11 @@ class CandyS3Test {
                                 new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                         .configureDownloadCondition().ifMatch("x").endConfigureCondition()
                                         .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                        Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2218,19 +2321,19 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
 
                 {
@@ -2238,10 +2341,10 @@ class CandyS3Test {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDownloadCondition().ifNoneMatch(result.getResults().get(0).geteTag()).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2249,19 +2352,19 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
 
                 {
@@ -2269,10 +2372,10 @@ class CandyS3Test {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDownloadCondition().ifModifiedSince(result.getResults().get(0).getLastModified()).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2280,19 +2383,19 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
 
                 {
@@ -2300,10 +2403,10 @@ class CandyS3Test {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDownloadCondition().ifUnmodifiedSince(new Date(result.getResults().get(0).getLastModified().getTime() - 1000)).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2311,30 +2414,32 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void multipartUploadPropertiesTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void multipartUploadPropertiesTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("multipartUploadPropertiesTest");
         String objectKey = "multipartUploadPropertiesTest.data";
         try {
@@ -2373,25 +2478,25 @@ class CandyS3Test {
                         .build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
+                Assertions.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
 
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
-                    Assert.assertEquals(2, s3Object.getPartsCount().intValue());
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
+                    Assertions.assertEquals(2, s3Object.getPartsCount().intValue());
                 } else {
-                    Assert.assertNull(s3Object.getPartsCount());
+                    Assertions.assertNull(s3Object.getPartsCount());
                 }
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertNull(objectMetadata.getContentRange());
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertNull(objectMetadata.getContentRange());
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
             }
 
             // getObjectMetadata with partNumber
@@ -2400,21 +2505,21 @@ class CandyS3Test {
                         .partNumber(2).build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes2.length);
+                Assertions.assertEquals(s3Object.getSize(), bytes2.length);
 
-                Assert.assertEquals(s3Object.getPartsCount(), (Integer) 2);
+                Assertions.assertEquals(s3Object.getPartsCount(), (Integer) 2);
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertEquals(objectMetadata.getContentRange(), "bytes " + bytes1.length + "-" + (bytes1.length + bytes2.length - 1) + "/" + (bytes1.length + bytes2.length));
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertEquals(objectMetadata.getContentRange(), "bytes " + bytes1.length + "-" + (bytes1.length + bytes2.length - 1) + "/" + (bytes1.length + bytes2.length));
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
             }
 
             // getObjectMetadata with range
@@ -2423,26 +2528,68 @@ class CandyS3Test {
                         .range(bytes1.length - 10, bytes1.length).build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes1.length - (bytes1.length - 10) + 1);
+                Assertions.assertEquals(s3Object.getSize(), bytes1.length - (bytes1.length - 10) + 1);
 
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
-                    Assert.assertEquals(2, s3Object.getPartsCount().intValue());
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
+                    Assertions.assertEquals(2, s3Object.getPartsCount().intValue());
                 } else {
-                    Assert.assertNull(s3Object.getPartsCount());
+                    Assertions.assertNull(s3Object.getPartsCount());
                 }
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertEquals(objectMetadata.getContentRange(), "bytes " + (bytes1.length - 10) + "-" + (bytes1.length) + "/" + (bytes1.length + bytes2.length));
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertEquals(objectMetadata.getContentRange(), "bytes " + (bytes1.length - 10) + "-" + (bytes1.length) + "/" + (bytes1.length + bytes2.length));
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
             }
+
+        } finally {
+            deleteAllObjectVersions(provider(), bucket);
+            candyS3.deleteBucket(bucket);
+        }
+    }
+
+    @Test
+    @Tag(TestTag.conditional)
+    void multipartUploadPropertiesWithConditionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
+        String bucket = genTestBucketName("mpUploadPropWithCondTest");
+        String objectKey = "mpUploadPropWithCondTest.data";
+        try {
+            candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
+
+            Date expiresDate = new Date(System.currentTimeMillis() + 1000 * 60 * 2);
+
+            String uploadId = candyS3.createMultipartUpload(bucket, objectKey, new CreateMultipartUploadOptions.CreateMultipartUploadOptionsBuilder()
+                    .configurePutObjectHeaderOptions()
+                    .cacheControl("public, max-age=3600")
+                    .contentDisposition("attachment; filename=\"thisisaattachment.html\"")
+                    .contentEncoding("gzip, deflate")
+                    .contentLanguage("en, zh-CN")
+                    .contentType("text/html")
+                    .expires(expiresDate)
+                    .endConfigureObjectHeaderOptions()
+                    .build());
+
+            byte[] bytes1 = StringUtils.repeat('x', 6 * 1024 * 1024).getBytes(StandardCharsets.UTF_8);
+            S3Part part1 = candyS3.uploadPart(bucket, objectKey, uploadId, 1, new UploadPartOptions.UploadPartOptionsBuilder()
+                    .configureUploadData().withData(bytes1).endConfigureDataContent()
+                    .build());
+
+            byte[] bytes2 = new byte[]{1};
+            S3Part part2 = candyS3.uploadPart(bucket, objectKey, uploadId, 2, new UploadPartOptions.UploadPartOptionsBuilder()
+                    .configureUploadData().withData(bytes2).endConfigureDataContent()
+                    .build());
+
+            candyS3.completeMultipartUpload(bucket, objectKey, uploadId, Arrays.asList(part1, part2),
+                    new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder()
+                            .build());
 
             // getObjectMetadata with condition
             {
@@ -2454,11 +2601,11 @@ class CandyS3Test {
                                 new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                         .configureDownloadCondition().ifMatch("x").endConfigureCondition()
                                         .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                        Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2466,25 +2613,25 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
 
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
-                        Assert.assertEquals(2, s3Object.getPartsCount().intValue());
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
+                        Assertions.assertEquals(2, s3Object.getPartsCount().intValue());
                     } else {
-                        Assert.assertNull(s3Object.getPartsCount());
+                        Assertions.assertNull(s3Object.getPartsCount());
                     }
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
 
                 {
@@ -2492,10 +2639,10 @@ class CandyS3Test {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDownloadCondition().ifNoneMatch(result.getResults().get(0).geteTag()).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2503,25 +2650,25 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
 
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
-                        Assert.assertEquals(2, s3Object.getPartsCount().intValue());
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
+                        Assertions.assertEquals(2, s3Object.getPartsCount().intValue());
                     } else {
-                        Assert.assertNull(s3Object.getPartsCount());
+                        Assertions.assertNull(s3Object.getPartsCount());
                     }
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
 
                 {
@@ -2529,10 +2676,10 @@ class CandyS3Test {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDownloadCondition().ifModifiedSince(result.getResults().get(0).getLastModified()).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2540,25 +2687,25 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
 
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
-                        Assert.assertEquals(2, s3Object.getPartsCount().intValue());
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
+                        Assertions.assertEquals(2, s3Object.getPartsCount().intValue());
                     } else {
-                        Assert.assertNull(s3Object.getPartsCount());
+                        Assertions.assertNull(s3Object.getPartsCount());
                     }
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
 
                 {
@@ -2566,10 +2713,10 @@ class CandyS3Test {
                         candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDownloadCondition().ifUnmodifiedSince(new Date(result.getResults().get(0).getLastModified().getTime() - 1000)).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                     S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey,
                             new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -2577,36 +2724,38 @@ class CandyS3Test {
                                     .build());
                     S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                    Assert.assertNull(s3Object.getContentBytes());
-                    Assert.assertNotNull(s3Object.getObjectMetadata());
+                    Assertions.assertNull(s3Object.getContentBytes());
+                    Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                    Assert.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
+                    Assertions.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
 
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
-                        Assert.assertEquals(2, s3Object.getPartsCount().intValue());
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
+                        Assertions.assertEquals(2, s3Object.getPartsCount().intValue());
                     } else {
-                        Assert.assertNull(s3Object.getPartsCount());
+                        Assertions.assertNull(s3Object.getPartsCount());
                     }
 
-                    Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                    Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                    Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                    Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                    Assert.assertNull(objectMetadata.getContentRange());
-                    Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                    Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                    Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                    Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                    Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                    Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                    Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                    Assertions.assertNull(objectMetadata.getContentRange());
+                    Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                    Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                    Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
                 }
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void copyObjectPropertiesTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void copyObjectPropertiesTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("copyObjectPropertiesTest");
         String sourceObjectKey = "source.data";
         String copyWithCopyDirectiveObjectKey = "copy1.data";
@@ -2648,7 +2797,7 @@ class CandyS3Test {
                         .build();
 
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, sourceObjectKey)
                             .excludeTaggingDirective()
@@ -2667,19 +2816,19 @@ class CandyS3Test {
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, copyWithCopyDirectiveObjectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes.length);
+                Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertNull(objectMetadata.getContentRange());
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(sourceExpiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(sourceExpiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertNull(objectMetadata.getContentRange());
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(sourceExpiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(sourceExpiresDate.getTime() + 1000)));
             }
 
             // copy object with x-amz-metadata-directive is REPLACE
@@ -2698,7 +2847,7 @@ class CandyS3Test {
                         .endConfigureCopyObjectHeaderOptions()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, sourceObjectKey)
                             .excludeTaggingDirective()
@@ -2718,39 +2867,41 @@ class CandyS3Test {
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, copyWithReplaceDirectiveObjectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes.length);
+                Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=7200");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment-copy.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en");
-                Assert.assertNull(objectMetadata.getContentRange());
-                Assert.assertEquals(objectMetadata.getContentType(), "text/plain");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=7200");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment-copy.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en");
+                Assertions.assertNull(objectMetadata.getContentRange());
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/plain");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
 
             }
 
             Thread.sleep(30 * 1000);
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void putAndGetObjectLockPropertiesTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectLock)
+    void putAndGetObjectLockPropertiesTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("pAGOLTest");
         String objectKey = "putAndGetObjectLockPropertiesTest.data";
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
 
             // Enable object-lock when create bucket is not supported by Tencent cloud COS
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.enableBucketObjectLock(bucket, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder().buildWithoutRetention());
             }
 
@@ -2768,13 +2919,13 @@ class CandyS3Test {
                         .build());
 
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey + 1, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
+                Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
             }
             // createMultipartUpload with object lock
             {
@@ -2799,13 +2950,13 @@ class CandyS3Test {
                         new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder().build());
 
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey + 2, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
+                Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
             }
             // copyObject with object lock
             {
@@ -2821,25 +2972,27 @@ class CandyS3Test {
                                 .build());
 
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey + 3, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(copyObjectretainDate.getTime() - 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(copyObjectretainDate.getTime() + 1000)));
-                Assert.assertFalse(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
+                Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(copyObjectretainDate.getTime() - 1000)));
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(copyObjectretainDate.getTime() + 1000)));
+                Assertions.assertFalse(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
             }
 
 
             Thread.sleep(60 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void putAndGetObjectStorageClassTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void putAndGetObjectStorageClassTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putAndGetObjectStorageClassTest");
         byte[] bytes = "x我y".getBytes(StandardCharsets.UTF_8);
         try {
@@ -2856,12 +3009,12 @@ class CandyS3Test {
 
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
+                Assertions.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
 
-                Assert.assertEquals(s3Object.getStorageClass(), StorageClass.STANDARD_IA.name());
+                Assertions.assertEquals(s3Object.getStorageClass(), StorageClass.STANDARD_IA.name());
             }
 
             // multipartUpload and getObjectMetadata
@@ -2888,12 +3041,12 @@ class CandyS3Test {
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey2, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                         .build());
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
+                Assertions.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
 
-                Assert.assertEquals(s3Object.getStorageClass(), StorageClass.STANDARD_IA.name());
+                Assertions.assertEquals(s3Object.getStorageClass(), StorageClass.STANDARD_IA.name());
             }
 
             // copyObject and getObjectMetadata
@@ -2914,7 +3067,7 @@ class CandyS3Test {
                         .copySource(bucket, sourceObjectKey)
                         .storageClass(StorageClass.STANDARD_IA)
                         .build();
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, sourceObjectKey)
                             .excludeTaggingDirective()
@@ -2925,23 +3078,25 @@ class CandyS3Test {
 
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, copyObjectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes.length);
+                Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                Assert.assertEquals(s3Object.getStorageClass(), StorageClass.STANDARD_IA.name());
+                Assertions.assertEquals(s3Object.getStorageClass(), StorageClass.STANDARD_IA.name());
 
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void putAndGetObjectTagTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.tagging)
+    void putAndGetObjectTagTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putAndGetObjectTagTest");
         String objectKey = "putAndGetObjectTagTest.data";
         byte[] bytes = "x我y".getBytes(StandardCharsets.UTF_8);
@@ -2962,12 +3117,12 @@ class CandyS3Test {
 
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
+                Assertions.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
 
-                Assert.assertEquals(s3Object.getTagCount(), (Integer) 3);
+                Assertions.assertEquals(s3Object.getTagCount(), (Integer) 3);
             }
 
             // multipartUpload and getObjectMetadata
@@ -2997,12 +3152,12 @@ class CandyS3Test {
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                         .build());
 
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
+                Assertions.assertEquals(s3Object.getSize(), bytes1.length + bytes2.length);
 
-                Assert.assertEquals(s3Object.getTagCount(), (Integer) 3);
+                Assertions.assertEquals(s3Object.getTagCount(), (Integer) 3);
             }
 
             // copyObject and getObjectMetadata
@@ -3041,12 +3196,12 @@ class CandyS3Test {
                     {
                         S3Object s3Object = candyS3.getObjectMetadata(bucket, copyWithCopyDirectiveObjectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                        Assert.assertNull(s3Object.getContentBytes());
-                        Assert.assertNotNull(s3Object.getObjectMetadata());
+                        Assertions.assertNull(s3Object.getContentBytes());
+                        Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                        Assert.assertEquals(s3Object.getSize(), bytes.length);
+                        Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                        Assert.assertEquals(s3Object.getTagCount(), (Integer) 3);
+                        Assertions.assertEquals(s3Object.getTagCount(), (Integer) 3);
                     }
                 }
 
@@ -3063,23 +3218,25 @@ class CandyS3Test {
                     {
                         S3Object s3Object = candyS3.getObjectMetadata(bucket, copyWithReplaceDirectiveObjectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                        Assert.assertNull(s3Object.getContentBytes());
-                        Assert.assertNotNull(s3Object.getObjectMetadata());
+                        Assertions.assertNull(s3Object.getContentBytes());
+                        Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                        Assert.assertEquals(s3Object.getSize(), bytes.length);
+                        Assertions.assertEquals(s3Object.getSize(), bytes.length);
 
-                        Assert.assertEquals(s3Object.getTagCount(), (Integer) 4);
+                        Assertions.assertEquals(s3Object.getTagCount(), (Integer) 4);
                     }
                 }
             }
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void putAndGetObjectSseTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.sse)
+    void putAndGetObjectSseTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putAndGetObjectSseTest");
         String baseObjectKey = "putAndGetObjectSseTest.data";
         try {
@@ -3120,7 +3277,7 @@ class CandyS3Test {
                         .endConfigureServerSideEncryptionOptions()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, baseObjectKey + 1)
                             .excludeTaggingDirective()
@@ -3138,10 +3295,10 @@ class CandyS3Test {
             for (int i = 1; i <= 3; i++) {
                 S3Object s3Object = candyS3.getObjectMetadata(bucket, baseObjectKey + i, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                Assert.assertNotNull(s3Object.getServerSideEncryptionConfiguration());
-                Assert.assertEquals(s3Object.getServerSideEncryptionConfiguration().getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
+                Assertions.assertNotNull(s3Object.getServerSideEncryptionConfiguration());
+                Assertions.assertEquals(s3Object.getServerSideEncryptionConfiguration().getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
 
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
                 deleteObjectsBatchOptionsBuilder.addDeleteObject(baseObjectKey + i);
             }
@@ -3150,10 +3307,10 @@ class CandyS3Test {
             for (int i = 1; i <= 3; i++) {
                 S3Object s3Object = candyS3.downloadObject(bucket, baseObjectKey + i, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                Assert.assertNotNull(s3Object.getServerSideEncryptionConfiguration());
-                Assert.assertEquals(s3Object.getServerSideEncryptionConfiguration().getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
+                Assertions.assertNotNull(s3Object.getServerSideEncryptionConfiguration());
+                Assertions.assertEquals(s3Object.getServerSideEncryptionConfiguration().getSseAlgorithm(), ServerSideEncryptionAlgorithm.AES256.getAlgorithm());
 
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
                 deleteObjectsBatchOptionsBuilder.addDeleteObject(baseObjectKey + i);
             }
@@ -3165,8 +3322,10 @@ class CandyS3Test {
 
     }
 
-    void copyObjectAndDownloadTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void copyObjectAndDownloadTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket1 = genTestBucketName("copyDownloadObjectTest1");
         String objectKey1 = "copyDownloadObjectTest1.data";
         String bucket2 = genTestBucketName("copyDownloadObjectTest2");
@@ -3182,8 +3341,8 @@ class CandyS3Test {
                     .build());
             ListPaginationResult<S3Object> result1 =
                     candyS3.listObjects(bucket1, new ListObjectOptions());
-            Assert.assertEquals(result1.getResults().get(0).getKey(), objectKey1);
-            Assert.assertEquals(result1.getResults().get(0).getSize(), 1024);
+            Assertions.assertEquals(result1.getResults().get(0).getKey(), objectKey1);
+            Assertions.assertEquals(result1.getResults().get(0).getSize(), 1024);
 
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket2).build());
 
@@ -3191,7 +3350,7 @@ class CandyS3Test {
                     .copySource(bucket1, objectKey1)
                     .build();
             // Cloudflare R2 does not support 'x-amz-tagging-directive'
-            if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+            if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                 copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                         .copySource(bucket1, objectKey1)
                         .excludeTaggingDirective()
@@ -3200,14 +3359,14 @@ class CandyS3Test {
             candyS3.copyObject(bucket2, objectKey2, copyObjectOptions);
             ListPaginationResult<S3Object> result2 =
                     candyS3.listObjects(bucket2, new ListObjectOptions());
-            Assert.assertEquals(result2.getResults().get(0).getKey(), objectKey2);
-            Assert.assertEquals(result2.getResults().get(0).getSize(), 1024);
+            Assertions.assertEquals(result2.getResults().get(0).getKey(), objectKey2);
+            Assertions.assertEquals(result2.getResults().get(0).getSize(), 1024);
 
             S3Object downloadObject2 = candyS3.downloadObject(bucket2, objectKey2,
                     new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .build());
-            Assert.assertArrayEquals(bytes, downloadObject2.getContentBytes());
+            Assertions.assertArrayEquals(bytes, downloadObject2.getContentBytes());
 
         } finally {
             candyS3.deleteObject(bucket1, new DeleteObjectOptions(objectKey1));
@@ -3218,8 +3377,10 @@ class CandyS3Test {
         }
     }
 
-    void copyObjectCopySourceConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void copyObjectCopySourceConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("cOCSCondTest");
         String objectKey = "copyObjectCopySourceConditionalTest.data";
         String objectKey2 = "copyObjectCopySourceConditionalTest2.data";
@@ -3247,7 +3408,7 @@ class CandyS3Test {
                             .ifMatch("x").endConfigureCondition()
                             .build();
                     // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                         copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                                 .copySource(bucket, objectKey)
                                 .excludeTaggingDirective()
@@ -3256,11 +3417,11 @@ class CandyS3Test {
                                 .build();
                     }
                     candyS3.copyObject(bucket, objectKey2, copyObjectOptions);
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                    Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
 
                 CopyObjectOptions copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
@@ -3268,7 +3429,7 @@ class CandyS3Test {
                         .configureCopySourceCondition().ifMatch(objectEtag).endConfigureCondition()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, objectKey)
                             .excludeTaggingDirective()
@@ -3285,7 +3446,7 @@ class CandyS3Test {
                             .configureCopySourceCondition().ifNoneMatch(objectEtag).endConfigureCondition()
                             .build();
                     // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                         copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                                 .copySource(bucket, objectKey)
                                 .excludeTaggingDirective()
@@ -3293,13 +3454,13 @@ class CandyS3Test {
                                 .build();
                     }
                     candyS3.copyObject(bucket, objectKey3, copyObjectOptions);
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    if (S3Provider.ALIYUN_OSS.equals(provider)) {
-                        Assert.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    if (S3Provider.ALIYUN_OSS.equals(provider())) {
+                        Assertions.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
                     } else {
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                 }
 
@@ -3308,7 +3469,7 @@ class CandyS3Test {
                         .configureCopySourceCondition().ifNoneMatch("x").endConfigureCondition()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, objectKey)
                             .excludeTaggingDirective()
@@ -3325,7 +3486,7 @@ class CandyS3Test {
                             .configureCopySourceCondition().ifModifiedSince(objectLastModified).endConfigureCondition()
                             .build();
                     // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                         copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                                 .copySource(bucket, objectKey)
                                 .excludeTaggingDirective()
@@ -3333,13 +3494,13 @@ class CandyS3Test {
                                 .build();
                     }
                     candyS3.copyObject(bucket, objectKey4, copyObjectOptions);
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    if (S3Provider.ALIYUN_OSS.equals(provider)) {
-                        Assert.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    if (S3Provider.ALIYUN_OSS.equals(provider())) {
+                        Assertions.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
                     } else {
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
                     }
                 }
 
@@ -3350,7 +3511,7 @@ class CandyS3Test {
                         .endConfigureCondition()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, objectKey)
                             .excludeTaggingDirective()
@@ -3371,7 +3532,7 @@ class CandyS3Test {
                             .endConfigureCondition()
                             .build();
                     // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                         copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                                 .copySource(bucket, objectKey)
                                 .excludeTaggingDirective()
@@ -3381,11 +3542,11 @@ class CandyS3Test {
                                 .build();
                     }
                     candyS3.copyObject(bucket, objectKey5, copyObjectOptions);
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                    Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
 
                 CopyObjectOptions copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
@@ -3395,7 +3556,7 @@ class CandyS3Test {
                         .endConfigureCondition()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, objectKey)
                             .excludeTaggingDirective()
@@ -3418,8 +3579,10 @@ class CandyS3Test {
         }
     }
 
-    void copyObjectCopySourceUnionConditionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void copyObjectCopySourceUnionConditionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("cOCSUnionCondTest");
         String objectKey = "copyObjectCopySourceUnionConditionTest.data";
         String objectKey6 = "copyObjectCopySourceUnionConditionTest1.data";
@@ -3450,7 +3613,7 @@ class CandyS3Test {
                         .endConfigureCondition()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, objectKey)
                             .excludeTaggingDirective()
@@ -3476,7 +3639,7 @@ class CandyS3Test {
                             .endConfigureCondition()
                             .build();
                     // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                         copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                                 .copySource(bucket, objectKey)
                                 .excludeTaggingDirective()
@@ -3487,10 +3650,10 @@ class CandyS3Test {
                                 .build();
                     }
                     candyS3.copyObject(bucket, objectKey7, copyObjectOptions);
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
                 }
             }
 
@@ -3503,8 +3666,10 @@ class CandyS3Test {
         }
     }
 
-    void copyObjectWriteTargetConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void copyObjectWriteTargetConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("cOWTCondTest");
         String sourceKey = "source.data";
         String existsTargetKey = "existsTarget.data";
@@ -3533,7 +3698,7 @@ class CandyS3Test {
                         .endConfigureCondition()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, sourceKey)
                             .excludeTaggingDirective()
@@ -3551,7 +3716,7 @@ class CandyS3Test {
                             .configureTargetWriteCondition().ifNotExists().endConfigureCondition()
                             .build();
                     // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                         copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                                 .copySource(bucket, sourceKey)
                                 .excludeTaggingDirective()
@@ -3559,11 +3724,11 @@ class CandyS3Test {
                                 .build();
                     }
                     candyS3.copyObject(bucket, existsTargetKey, copyObjectOptions);
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                    Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
             }
 
@@ -3574,7 +3739,7 @@ class CandyS3Test {
                         .configureTargetWriteCondition().ifMatch(existsTargetObjectEtag).endConfigureCondition()
                         .build();
                 // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                     copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                             .copySource(bucket, sourceKey)
                             .configureTargetWriteCondition().ifMatch(existsTargetObjectEtag).endConfigureCondition()
@@ -3592,7 +3757,7 @@ class CandyS3Test {
                             .configureTargetWriteCondition().ifMatch("x").endConfigureCondition()
                             .build();
                     // Cloudflare R2 does not support 'x-amz-tagging-directive'
-                    if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
+                    if (S3Provider.CLOUDFLARE_R2.equals(provider())) {
                         copyObjectOptions = new CopyObjectOptions.CopyObjectOptionsBuilder()
                                 .copySource(bucket, sourceKey)
                                 .excludeTaggingDirective()
@@ -3600,11 +3765,11 @@ class CandyS3Test {
                                 .build();
                     }
                     candyS3.copyObject(bucket, existsTargetKey, copyObjectOptions);
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                    Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
             }
 
@@ -3617,8 +3782,10 @@ class CandyS3Test {
         }
     }
 
-    void copyObjectVersionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void copyObjectVersionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("copyObjectVersionTest");
         String objectKey1 = "copyObjectVersionTest1.data";
         String objectKey2 = "copyObjectVersionTest2.data";
@@ -3646,16 +3813,18 @@ class CandyS3Test {
                     new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .build());
-            Assert.assertArrayEquals(content1.getBytes(StandardCharsets.UTF_8), downloadObject2.getContentBytes());
+            Assertions.assertArrayEquals(content1.getBytes(StandardCharsets.UTF_8), downloadObject2.getContentBytes());
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void copyPartTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void copyPartTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("copyPartTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -3711,7 +3880,7 @@ class CandyS3Test {
 
             String exceptContent = part1Content + sourceContent2.substring(1024 * 1024 - 1) + sourceContent1;
             byte[] actualContent = Files.readAllBytes(Paths.get(outputFile));
-            Assert.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), actualContent);
+            Assertions.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), actualContent);
 
             candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
                     .addDeleteObject(sourceObjectKey1)
@@ -3723,8 +3892,10 @@ class CandyS3Test {
         }
     }
 
-    void copyPartConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void copyPartConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("copyPartConditionalTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -3759,11 +3930,11 @@ class CandyS3Test {
                                 .configureCopySourceCondition()
                                 .ifMatch("x").endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                        Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                     }
 
                     String partEtag = candyS3.copyPart(bucket, objectKey, uploadId, parts.size() + 1, new CopyPartOptions.CopyPartOptionsBuilder()
@@ -3784,14 +3955,14 @@ class CandyS3Test {
                                 .copySource(bucket, sourceObjectKey)
                                 .configureCopySourceCondition().ifNoneMatch(sourceObject.geteTag()).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        if (S3Provider.ALIYUN_OSS.equals(provider)) {
-                            Assert.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        if (S3Provider.ALIYUN_OSS.equals(provider())) {
+                            Assertions.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
                         } else {
-                            Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                            Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                            Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                            Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                         }
                     }
 
@@ -3813,14 +3984,14 @@ class CandyS3Test {
                                 .copySource(bucket, sourceObjectKey)
                                 .configureCopySourceCondition().ifModifiedSince(sourceObject.getLastModified()).endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        if (S3Provider.ALIYUN_OSS.equals(provider)) {
-                            Assert.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        if (S3Provider.ALIYUN_OSS.equals(provider())) {
+                            Assertions.assertEquals("Not Modified", ((CandyS3Exception) ex).getParsedError().getMessage());
                         } else {
-                            Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                            Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                            Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                            Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                         }
                     }
                     String partEtag = candyS3.copyPart(bucket, objectKey, uploadId, parts.size() + 1, new CopyPartOptions.CopyPartOptionsBuilder()
@@ -3844,11 +4015,11 @@ class CandyS3Test {
                                 .ifUnmodifiedSince(new Date(sourceObject.getLastModified().getTime() - 1000))
                                 .endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                        Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                     }
                     String partEtag = candyS3.copyPart(bucket, objectKey, uploadId, parts.size() + 1, new CopyPartOptions.CopyPartOptionsBuilder()
                             .copySource(bucket, sourceObjectKey)
@@ -3875,7 +4046,7 @@ class CandyS3Test {
 
             String exceptContent = part1Content + sourceContent + sourceContent + sourceContent + sourceContent;
             byte[] actualContent = Files.readAllBytes(Paths.get(outputFile));
-            Assert.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), actualContent);
+            Assertions.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), actualContent);
 
             Files.delete(Paths.get(outputFile));
 
@@ -3888,8 +4059,10 @@ class CandyS3Test {
         }
     }
 
-    void copyPartWithUnionConditionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void copyPartWithUnionConditionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("copyPartWithUnionConditionTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -3947,11 +4120,11 @@ class CandyS3Test {
                                 .ifModifiedSince(new Date(sourceObject.getLastModified().getTime() - 1000)) // true
                                 .endConfigureCondition()
                                 .build());
-                        Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                        Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                     } catch (Exception ex) {
-                        Assert.assertTrue(ex instanceof CandyS3Exception);
-                        Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                        Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                        Assertions.assertTrue(ex instanceof CandyS3Exception);
+                        Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                        Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                     }
                 }
 
@@ -3967,7 +4140,7 @@ class CandyS3Test {
 
             String exceptContent = part1Content + sourceContent;
             byte[] actualContent = Files.readAllBytes(Paths.get(outputFile));
-            Assert.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), actualContent);
+            Assertions.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), actualContent);
 
             Files.delete(Paths.get(outputFile));
 
@@ -3981,8 +4154,10 @@ class CandyS3Test {
     }
 
 
-    void copyPartVersionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void copyPartVersionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("copyPartVersionTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -4014,7 +4189,7 @@ class CandyS3Test {
                     .build());
             parts.add(part1);
 
-            Assert.assertFalse(sourceObjectVersions.get(1).getIsLatest());
+            Assertions.assertFalse(sourceObjectVersions.get(1).getIsLatest());
             String part2Etag = candyS3.copyPart(bucket, objectKey, uploadId, 2, new CopyPartOptions.CopyPartOptionsBuilder()
                     .copySource(bucket, sourceObjectKey, sourceObjectVersions.get(1).getVersionId())
                     .build());
@@ -4023,7 +4198,7 @@ class CandyS3Test {
             part2.setEtag(part2Etag);
             parts.add(part2);
 
-            Assert.assertTrue(sourceObjectVersions.get(0).getIsLatest());
+            Assertions.assertTrue(sourceObjectVersions.get(0).getIsLatest());
             String part3Etag = candyS3.copyPart(bucket, objectKey, uploadId, 3, new CopyPartOptions.CopyPartOptionsBuilder()
                     .copySource(bucket, sourceObjectKey)
                     .build());
@@ -4040,17 +4215,19 @@ class CandyS3Test {
                     .build());
 
             String exceptContent = part1Content + sourceContentV1 + sourceContentV2;
-            Assert.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), downloadObject.getContentBytes());
+            Assertions.assertArrayEquals(exceptContent.getBytes(StandardCharsets.UTF_8), downloadObject.getContentBytes());
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
 
-    void downloadObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void downloadObjectTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectTest");
         String objectKey = "downloadObjectTest.data";
         String content = StringUtils.repeat("x", 6 * 1024 * 1024); // 6MB
@@ -4070,11 +4247,11 @@ class CandyS3Test {
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toFile(downloadToFile, false).endConfigureDataOutput()
                                 .build());
-                Assert.assertNull(s3Object.getContentBytes());
+                Assertions.assertNull(s3Object.getContentBytes());
 
                 byte[] downloadToFileBytes = Files.readAllBytes(Paths.get(downloadToFile));
                 Files.deleteIfExists(Paths.get(downloadToFile));
-                Assert.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), downloadToFileBytes);
+                Assertions.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), downloadToFileBytes);
             }
 
             {
@@ -4084,8 +4261,8 @@ class CandyS3Test {
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toStream(outputStream).endConfigureDataOutput()
                                 .build());
-                Assert.assertNull(s3Object.getContentBytes());
-                Assert.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), outputStream.toByteArray());
+                Assertions.assertNull(s3Object.getContentBytes());
+                Assertions.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), outputStream.toByteArray());
             }
 
             {
@@ -4094,7 +4271,7 @@ class CandyS3Test {
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), s3Object.getContentBytes());
+                Assertions.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), s3Object.getContentBytes());
             }
 
         } finally {
@@ -4103,8 +4280,10 @@ class CandyS3Test {
         }
     }
 
-    void downloadObjectRangeTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void downloadObjectRangeTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectRangeTest");
         String objectKey = "downloadObjectRangeTest.data";
         String content = "0123456789";
@@ -4128,8 +4307,8 @@ class CandyS3Test {
 
                 byte[] downloadRangeToFileBytes1 = Files.readAllBytes(Paths.get(downloadRangeToFile1));
                 Files.deleteIfExists(Paths.get(downloadRangeToFile1));
-                Assert.assertEquals("bytes 2-5/10", s3ObjectRange.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, 6), downloadRangeToFileBytes1);
+                Assertions.assertEquals("bytes 2-5/10", s3ObjectRange.getObjectMetadata().getContentRange());
+                Assertions.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, 6), downloadRangeToFileBytes1);
             }
             {
                 String downloadRangeToFile2 = "./temp/downloadRangeToFile2.data";
@@ -4142,8 +4321,8 @@ class CandyS3Test {
 
                 byte[] downloadRangeToFileBytes2 = Files.readAllBytes(Paths.get(downloadRangeToFile2));
                 Files.deleteIfExists(Paths.get(downloadRangeToFile2));
-                Assert.assertEquals("bytes 2-9/10", s3ObjectRange.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, content.getBytes().length), downloadRangeToFileBytes2);
+                Assertions.assertEquals("bytes 2-9/10", s3ObjectRange.getObjectMetadata().getContentRange());
+                Assertions.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, content.getBytes().length), downloadRangeToFileBytes2);
             }
 
             {
@@ -4154,8 +4333,8 @@ class CandyS3Test {
                                 .range(2, 5)
                                 .configureDataOutput().toStream(outputStream).endConfigureDataOutput()
                                 .build());
-                Assert.assertEquals("bytes 2-5/10", s3ObjectRange.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, 6), outputStream.toByteArray());
+                Assertions.assertEquals("bytes 2-5/10", s3ObjectRange.getObjectMetadata().getContentRange());
+                Assertions.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, 6), outputStream.toByteArray());
             }
             {
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -4165,8 +4344,8 @@ class CandyS3Test {
                                 .range(2)
                                 .configureDataOutput().toStream(outputStream).endConfigureDataOutput()
                                 .build());
-                Assert.assertEquals("bytes 2-9/10", s3ObjectRange.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, content.getBytes().length), outputStream.toByteArray());
+                Assertions.assertEquals("bytes 2-9/10", s3ObjectRange.getObjectMetadata().getContentRange());
+                Assertions.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, content.getBytes().length), outputStream.toByteArray());
             }
 
             {
@@ -4176,8 +4355,8 @@ class CandyS3Test {
                                 .range(2, 5)
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertEquals("bytes 2-5/10", s3ObjectRange.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, 6), s3ObjectRange.getContentBytes());
+                Assertions.assertEquals("bytes 2-5/10", s3ObjectRange.getObjectMetadata().getContentRange());
+                Assertions.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, 6), s3ObjectRange.getContentBytes());
             }
             {
                 // Download object range and record to byte array.
@@ -4186,8 +4365,8 @@ class CandyS3Test {
                                 .range(2)
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .build());
-                Assert.assertEquals("bytes 2-9/10", s3ObjectRange.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, content.getBytes().length), s3ObjectRange.getContentBytes());
+                Assertions.assertEquals("bytes 2-9/10", s3ObjectRange.getObjectMetadata().getContentRange());
+                Assertions.assertArrayEquals(Arrays.copyOfRange(content.getBytes(StandardCharsets.UTF_8), 2, content.getBytes().length), s3ObjectRange.getContentBytes());
             }
 
         } finally {
@@ -4196,8 +4375,10 @@ class CandyS3Test {
         }
     }
 
-    void downloadObjectOverwriteTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void downloadObjectOverwriteTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectOverwriteTest");
         String objectKey = "downloadObjectOverwriteTest.data";
         String content = StringUtils.repeat("x", 6 * 1024 * 1024); // 6MB
@@ -4214,7 +4395,7 @@ class CandyS3Test {
                 File file = new File(downloadToFileExists);
                 Files.deleteIfExists(Paths.get(downloadToFileExists));
                 file.createNewFile();
-                Assert.assertTrue(file.exists());
+                Assertions.assertTrue(file.exists());
 
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -4222,18 +4403,18 @@ class CandyS3Test {
                                 .toFile(downloadToFileExists, true)
                                 .endConfigureDataOutput()
                                 .build());
-                Assert.assertNull(s3Object.getContentBytes());
+                Assertions.assertNull(s3Object.getContentBytes());
 
                 byte[] downloadToFileBytes = Files.readAllBytes(Paths.get(downloadToFileExists));
                 Files.deleteIfExists(Paths.get(downloadToFileExists));
-                Assert.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), downloadToFileBytes);
+                Assertions.assertArrayEquals(content.getBytes(StandardCharsets.UTF_8), downloadToFileBytes);
             }
 
             {
                 File file = new File(downloadToFileExists);
                 Files.deleteIfExists(Paths.get(downloadToFileExists));
                 file.createNewFile();
-                Assert.assertTrue(file.exists());
+                Assertions.assertTrue(file.exists());
 
                 try {
                     candyS3.downloadObject(bucket, objectKey,
@@ -4243,8 +4424,8 @@ class CandyS3Test {
                                     .endConfigureDataOutput()
                                     .build());
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OUTPUT_FILE_ALREADY_EXISTS.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OUTPUT_FILE_ALREADY_EXISTS.getCode(), ((CandyS3Exception) ex).getCode());
                 }
             }
 
@@ -4254,8 +4435,10 @@ class CandyS3Test {
         }
     }
 
-    void downloadObjectConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void downloadObjectConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectConditionalTest");
         String objectKey = "downloadObjectConditionalTest.data";
         byte[] bytes = "x".getBytes(StandardCharsets.UTF_8);
@@ -4276,18 +4459,18 @@ class CandyS3Test {
                                     .configureDataOutput().toBytes().endConfigureDataOutput()
                                     .configureDownloadCondition().ifMatch("x").endConfigureCondition()
                                     .build());
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                    Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .configureDownloadCondition().ifMatch(objectEtag).endConfigureCondition()
                                 .build());
-                Assert.assertArrayEquals(bytes, s3Object.getContentBytes());
+                Assertions.assertArrayEquals(bytes, s3Object.getContentBytes());
             }
 
             {
@@ -4296,17 +4479,17 @@ class CandyS3Test {
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .configureDownloadCondition().ifNoneMatch(objectEtag).endConfigureCondition()
                             .build());
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
                 }
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .configureDownloadCondition().ifNoneMatch("x").endConfigureCondition()
                                 .build());
-                Assert.assertArrayEquals(bytes, s3Object.getContentBytes());
+                Assertions.assertArrayEquals(bytes, s3Object.getContentBytes());
             }
 
             {
@@ -4315,10 +4498,10 @@ class CandyS3Test {
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .configureDownloadCondition().ifModifiedSince(objectLastModified).endConfigureCondition()
                             .build());
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
                 }
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -4327,7 +4510,7 @@ class CandyS3Test {
                                 .ifModifiedSince(new Date(objectLastModified.getTime() - 1000))
                                 .endConfigureCondition()
                                 .build());
-                Assert.assertArrayEquals(bytes, s3Object.getContentBytes());
+                Assertions.assertArrayEquals(bytes, s3Object.getContentBytes());
             }
 
             {
@@ -4338,11 +4521,11 @@ class CandyS3Test {
                             .ifUnmodifiedSince(new Date(objectLastModified.getTime() - 1000))
                             .endConfigureCondition()
                             .build());
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                    Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey,
                         new DownloadObjectOptions.DownloadObjectOptionsBuilder()
@@ -4351,7 +4534,7 @@ class CandyS3Test {
                                 .ifUnmodifiedSince(new Date(objectLastModified.getTime() + 1))
                                 .endConfigureCondition()
                                 .build());
-                Assert.assertArrayEquals(bytes, s3Object.getContentBytes());
+                Assertions.assertArrayEquals(bytes, s3Object.getContentBytes());
             }
 
         } finally {
@@ -4360,8 +4543,10 @@ class CandyS3Test {
         }
     }
 
-    void downloadObjectUnionConditionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void downloadObjectUnionConditionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("dOUConditionTest");
         String objectKey = "downloadObjectUnionConditionTest.data";
         byte[] bytes = "x".getBytes(StandardCharsets.UTF_8);
@@ -4389,7 +4574,7 @@ class CandyS3Test {
                                 .ifUnmodifiedSince(new Date(objectLastModified.getTime() - 1000)) // false
                                 .endConfigureCondition()
                                 .build());
-                Assert.assertArrayEquals(bytes, s3Object.getContentBytes());
+                Assertions.assertArrayEquals(bytes, s3Object.getContentBytes());
             }
 
             {
@@ -4404,10 +4589,10 @@ class CandyS3Test {
                             .ifModifiedSince(new Date(objectLastModified.getTime() - 1000)) // true
                             .endConfigureCondition()
                             .build());
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_NOT_MODIFIED.getCode(), ((CandyS3Exception) ex).getCode());
                 }
             }
 
@@ -4417,8 +4602,10 @@ class CandyS3Test {
         }
     }
 
-    void downloadObjectPartTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void downloadObjectPartTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectPartTest");
         String objectKey = "downloadObjectPartTest.data";
         try {
@@ -4451,11 +4638,11 @@ class CandyS3Test {
 
                 byte[] downloadRangeToFileBytes1 = Files.readAllBytes(Paths.get(downloadRangeToFile1));
                 Files.deleteIfExists(Paths.get(downloadRangeToFile1));
-                Assert.assertEquals("bytes " + (part1Content.getBytes().length)
+                Assertions.assertEquals("bytes " + (part1Content.getBytes().length)
                                 + "-" + (part1Content.getBytes().length + 2)
                                 + "/" + (part1Content.getBytes().length + part2Content.getBytes().length),
                         s3ObjectPart.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange((part1Content + part2Content).getBytes(StandardCharsets.UTF_8),
+                Assertions.assertArrayEquals(Arrays.copyOfRange((part1Content + part2Content).getBytes(StandardCharsets.UTF_8),
                         part1Content.getBytes().length, part1Content.getBytes().length + 2 + 1), downloadRangeToFileBytes1);
             }
 
@@ -4467,11 +4654,11 @@ class CandyS3Test {
                                 .configureDataOutput().toStream(outputStream).endConfigureDataOutput()
                                 .partNumber(2)
                                 .build());
-                Assert.assertEquals("bytes " + (part1Content.getBytes().length)
+                Assertions.assertEquals("bytes " + (part1Content.getBytes().length)
                                 + "-" + (part1Content.getBytes().length + 2)
                                 + "/" + (part1Content.getBytes().length + part2Content.getBytes().length),
                         s3ObjectPart.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange((part1Content + part2Content).getBytes(StandardCharsets.UTF_8),
+                Assertions.assertArrayEquals(Arrays.copyOfRange((part1Content + part2Content).getBytes(StandardCharsets.UTF_8),
                         part1Content.getBytes().length, part1Content.getBytes().length + 2 + 1), outputStream.toByteArray());
             }
 
@@ -4482,11 +4669,11 @@ class CandyS3Test {
                                 .configureDataOutput().toBytes().endConfigureDataOutput()
                                 .partNumber(2)
                                 .build());
-                Assert.assertEquals("bytes " + (part1Content.getBytes().length)
+                Assertions.assertEquals("bytes " + (part1Content.getBytes().length)
                                 + "-" + (part1Content.getBytes().length + 2)
                                 + "/" + (part1Content.getBytes().length + part2Content.getBytes().length),
                         s3ObjectPart.getObjectMetadata().getContentRange());
-                Assert.assertArrayEquals(Arrays.copyOfRange((part1Content + part2Content).getBytes(StandardCharsets.UTF_8),
+                Assertions.assertArrayEquals(Arrays.copyOfRange((part1Content + part2Content).getBytes(StandardCharsets.UTF_8),
                         part1Content.getBytes().length, part1Content.getBytes().length + 2 + 1), s3ObjectPart.getContentBytes());
             }
 
@@ -4496,8 +4683,10 @@ class CandyS3Test {
         }
     }
 
-    void downloadObjectMetadataTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void downloadObjectMetadataTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectMetadataTest");
         String objectKey = "downloadObjectMetadataTest.data";
         byte[] bytes = "x我y".getBytes(StandardCharsets.UTF_8);
@@ -4522,18 +4711,18 @@ class CandyS3Test {
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
+                Assertions.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertNull(objectMetadata.getContentRange());
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertNull(objectMetadata.getContentRange());
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
             }
 
             // downloadObject with range
@@ -4542,36 +4731,38 @@ class CandyS3Test {
                         .range(1, bytes.length - 2).build());
                 S3Object.S3ObjectMetadata objectMetadata = s3Object.getObjectMetadata();
 
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), (bytes.length - 2) - 1 + 1);
+                Assertions.assertEquals(s3Object.getSize(), (bytes.length - 2) - 1 + 1);
 
-                Assert.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
-                Assert.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
-                Assert.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
-                Assert.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
-                Assert.assertEquals(objectMetadata.getContentRange(), "bytes 1-" + (bytes.length - 2) + "/" + (bytes.length));
-                Assert.assertEquals(objectMetadata.getContentType(), "text/html");
-                Assert.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
-                Assert.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
+                Assertions.assertEquals(objectMetadata.getCacheControl(), "public, max-age=3600");
+                Assertions.assertEquals(objectMetadata.getContentDisposition(), "attachment; filename=\"thisisaattachment.html\"");
+                Assertions.assertEquals(objectMetadata.getContentEncoding(), "gzip, deflate");
+                Assertions.assertEquals(objectMetadata.getContentLanguage(), "en, zh-CN");
+                Assertions.assertEquals(objectMetadata.getContentRange(), "bytes 1-" + (bytes.length - 2) + "/" + (bytes.length));
+                Assertions.assertEquals(objectMetadata.getContentType(), "text/html");
+                Assertions.assertTrue(objectMetadata.getExpires().after(new Date(expiresDate.getTime() - 1000)));
+                Assertions.assertTrue(objectMetadata.getExpires().before(new Date(expiresDate.getTime() + 1000)));
             }
 
             Thread.sleep(60 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void downloadObjectObjectLockPropertiesTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectLock)
+    void downloadObjectObjectLockPropertiesTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("dOLPTest");
         String objectKey = "downloadObjectObjectLockPropertiesTest.data";
         byte[] bytes = "x我y".getBytes(StandardCharsets.UTF_8);
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
             // Enable object-lock when create bucket is not supported by Tencent cloud COS
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.enableBucketObjectLock(bucket, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder().buildWithoutRetention());
             }
 
@@ -4588,26 +4779,28 @@ class CandyS3Test {
             // downloadObject
             {
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
+                Assertions.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
 
-                Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
+                Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().isObjectLockLegalHold());
 
             }
 
             Thread.sleep(60 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void downloadObjectStorageClassTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void downloadObjectStorageClassTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectStorageClassTest");
         String objectKey = "dOSCTest.data";
         byte[] bytes = "x我y".getBytes(StandardCharsets.UTF_8);
@@ -4622,22 +4815,24 @@ class CandyS3Test {
             // downloadObject
             {
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
+                Assertions.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
 
-                Assert.assertEquals(s3Object.getStorageClass(), StorageClass.STANDARD_IA.name());
+                Assertions.assertEquals(StorageClass.STANDARD_IA.name(), s3Object.getStorageClass());
             }
 
             Thread.sleep(60 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void downloadObjectTagTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.tagging)
+    void downloadObjectTagTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("downloadObjectMetadataTest");
         String objectKey = "downloadObjectMetadataTest.data";
         byte[] bytes = "x我y".getBytes(StandardCharsets.UTF_8);
@@ -4657,22 +4852,24 @@ class CandyS3Test {
             {
                 S3Object s3Object = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
 
-                Assert.assertNotNull(s3Object.getObjectMetadata());
+                Assertions.assertNotNull(s3Object.getObjectMetadata());
 
-                Assert.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
+                Assertions.assertEquals(s3Object.getSize(), "x我y".getBytes(StandardCharsets.UTF_8).length);
 
-                Assert.assertEquals(s3Object.getTagCount(), (Integer) 3);
+                Assertions.assertEquals(s3Object.getTagCount(), (Integer) 3);
             }
 
             Thread.sleep(60 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void getWithPresignUrlTest(S3Provider provider) throws IOException, InterruptedException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void getWithPresignUrlTest() throws IOException, InterruptedException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("getPresignUrlTest");
         String objectKey = "target.data";
         byte[] bytes = "1".getBytes(StandardCharsets.UTF_8);
@@ -4687,7 +4884,7 @@ class CandyS3Test {
 
             // generate presigned url and access object with it
             String presignUrl = candyS3.calculatePresignedUrl(bucket, objectKey, new PresignUrlOptions("GET", expireSecs));
-            Assert.assertNotNull(presignUrl);
+            Assertions.assertNotNull(presignUrl);
 
             URL url = new URL(presignUrl);
             HttpURLConnection conn1 = (HttpURLConnection) url.openConnection();
@@ -4695,8 +4892,8 @@ class CandyS3Test {
             conn1.setConnectTimeout(5000);
             conn1.setReadTimeout(5000);
             try {
-                Assert.assertEquals(conn1.getResponseCode(), 200);
-                Assert.assertEquals(readResponseBody(conn1), "1");
+                Assertions.assertEquals(conn1.getResponseCode(), 200);
+                Assertions.assertEquals(readResponseBody(conn1), "1");
             } finally {
                 conn1.disconnect();
             }
@@ -4710,20 +4907,22 @@ class CandyS3Test {
             conn2.setConnectTimeout(5000);
             conn2.setReadTimeout(5000);
             try {
-                Assert.assertEquals(403, conn2.getResponseCode());
-                Assert.assertTrue(readResponseBody(conn2).contains("Request has expired"));
+                Assertions.assertEquals(403, conn2.getResponseCode());
+                Assertions.assertTrue(readResponseBody(conn2).contains("Request has expired"));
             } finally {
                 conn2.disconnect();
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void putWithPresignUrlTest(S3Provider provider) throws IOException, InterruptedException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void putWithPresignUrlTest() throws IOException, InterruptedException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("putWithPresignUrlTest");
         String objectKey = "target.data";
         byte[] bytes = "1".getBytes(StandardCharsets.UTF_8);
@@ -4734,7 +4933,7 @@ class CandyS3Test {
 
             // generate presigned url and upload object with it
             String presignUrl = candyS3.calculatePresignedUrl(bucket, objectKey, new PresignUrlOptions("PUT", expireSecs));
-            Assert.assertNotNull(presignUrl);
+            Assertions.assertNotNull(presignUrl);
 
             URL url = new URL(presignUrl);
             HttpURLConnection conn1 = (HttpURLConnection) url.openConnection();
@@ -4747,13 +4946,13 @@ class CandyS3Test {
                 out.write(bytes);
             }
             try {
-                Assert.assertEquals(conn1.getResponseCode(), 200);
+                Assertions.assertEquals(conn1.getResponseCode(), 200);
             } finally {
                 conn1.disconnect();
             }
 
             S3Object s3Object = candyS3.downloadObject(bucket, objectKey, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build());
-            Assert.assertArrayEquals(bytes, s3Object.getContentBytes());
+            Assertions.assertArrayEquals(bytes, s3Object.getContentBytes());
 
             // wait the presigned url expires
             Thread.sleep((expireSecs + 1) * 1000);
@@ -4769,20 +4968,22 @@ class CandyS3Test {
                 out.write(bytes);
             }
             try {
-                Assert.assertEquals(conn2.getResponseCode(), 403);
-                Assert.assertTrue(readResponseBody(conn2).contains("Request has expired"));
+                Assertions.assertEquals(conn2.getResponseCode(), 403);
+                Assertions.assertTrue(readResponseBody(conn2).contains("Request has expired"));
             } finally {
                 conn2.disconnect();
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void objectRetentionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void objectRetentionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucketWithoutRetention = genTestBucketName("oRTest1-bWithoutR"); // bucketwithoutretention
         String bucketWithRetention = genTestBucketName("oRTest1-bWR"); // bucketWithRetention
         try {
@@ -4799,21 +5000,21 @@ class CandyS3Test {
                 S3Object s3Object = candyS3.downloadObject(bucketWithoutRetention, objectKey1, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                         .configureDataOutput().toBytes().endConfigureDataOutput()
                         .build());
-                Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
+                Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
 
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                         .after(new Date(dateTwoDaysLater.getTime() - 1000)));
-                Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+                Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                         .before(new Date(dateTwoDaysLater.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String twoDaysLaterStr = simpleDateFormat.format(dateTwoDaysLater);
                 String retainUntilDateStr = simpleDateFormat.format(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate());
-                Assert.assertEquals(twoDaysLaterStr, retainUntilDateStr);
+                Assertions.assertEquals(twoDaysLaterStr, retainUntilDateStr);
 
 
-                deleteAllObjectVersions(provider, bucketWithoutRetention);
+                deleteAllObjectVersions(provider(), bucketWithoutRetention);
             }
 
             // S3 bucket has default retention period, and object can use default retention period or custom retention period
@@ -4828,10 +5029,10 @@ class CandyS3Test {
                     S3Object s3Object = candyS3.downloadObject(bucketWithRetention, objectKeyUseBucketDefaultRetentionPeriod, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .build());
-                    Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
-                    Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+                    Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
+                    Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                             .after(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 - 1000 * 5)));
-                    Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+                    Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                             .before(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 + 1000 * 5)));
 
                 }
@@ -4845,20 +5046,20 @@ class CandyS3Test {
                     S3Object s3Object = candyS3.downloadObject(bucketWithRetention, objectKeyUseCustomRetentionPeriod, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                             .configureDataOutput().toBytes().endConfigureDataOutput()
                             .build());
-                    Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
-                    Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+                    Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
+                    Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                             .after(new Date(dateTwoDaysLater.getTime() - 1000)));
-                    Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+                    Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                             .before(new Date(dateTwoDaysLater.getTime() + 1000)));
 
                     SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                     simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                     String twoDaysLaterStr = simpleDateFormat.format(dateTwoDaysLater);
                     String retainUntilDateStr = simpleDateFormat.format(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate());
-                    Assert.assertEquals(twoDaysLaterStr, retainUntilDateStr);
+                    Assertions.assertEquals(twoDaysLaterStr, retainUntilDateStr);
                 }
 
-                deleteAllObjectVersions(provider, bucketWithRetention);
+                deleteAllObjectVersions(provider(), bucketWithRetention);
             }
         } finally {
             candyS3.deleteBucket(bucketWithoutRetention);
@@ -4866,8 +5067,10 @@ class CandyS3Test {
         }
     }
 
-    void objectVersionRetentionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void objectVersionRetentionTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("objectVersionRetentionTest");
         try {
 
@@ -4890,39 +5093,41 @@ class CandyS3Test {
 
             try {
                 candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                Assert.fail("Should not be here. Exception should be thrown when get retention on an object without retention");
+                Assertions.fail("Should not be here. Exception should be thrown when get retention on an object without retention");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
-                Assert.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
+                Assertions.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
             }
 
 
             ObjectLockProperties objectV1LockProps = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions()
                     .versionId(objectVersions.getResults().get(1).getVersionId()));
-            Assert.assertEquals(objectV1LockProps.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
-            Assert.assertTrue(objectV1LockProps.getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
-            Assert.assertTrue(objectV1LockProps.getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
+            Assertions.assertEquals(objectV1LockProps.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
+            Assertions.assertTrue(objectV1LockProps.getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
+            Assertions.assertTrue(objectV1LockProps.getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
 
             try {
                 candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions()
                         .versionId(objectVersions.getResults().get(0).getVersionId()));
-                Assert.fail("Should not be here. Exception should be thrown when get retention on an object version without retention");
+                Assertions.fail("Should not be here. Exception should be thrown when get retention on an object version without retention");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
-                Assert.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
+                Assertions.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
 
-    void updateObjectGovernancePeriodTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void updateObjectGovernancePeriodTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("uOGPTest");
         try {
 
@@ -4939,18 +5144,18 @@ class CandyS3Test {
 
             {
                 ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
+                Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
 
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .after(new Date(retainDate.getTime() - 1000)));
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .before(new Date(retainDate.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String retainDateStr = simpleDateFormat.format(retainDate);
                 String retainUntilDateStr = simpleDateFormat.format(objectLockProperties.getObjectLockRetainUntilDate());
-                Assert.assertEquals(retainDateStr, retainUntilDateStr);
+                Assertions.assertEquals(retainDateStr, retainUntilDateStr);
             }
 
             // Update retention in GOVERNANCE mode to a later date is permitted
@@ -4960,18 +5165,18 @@ class CandyS3Test {
                         .retainUntilDate(laterDate));
 
                 ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
+                Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
 
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .after(new Date(laterDate.getTime() - 1000)));
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .before(new Date(laterDate.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String laterDateStr = simpleDateFormat.format(laterDate);
                 String retainUntilDateStr = simpleDateFormat.format(objectLockProperties.getObjectLockRetainUntilDate());
-                Assert.assertEquals(laterDateStr, retainUntilDateStr);
+                Assertions.assertEquals(laterDateStr, retainUntilDateStr);
             }
 
             // Update retention in GOVERNANCE mode to a closer date is not permitted unless use bypassGovernanceRetention
@@ -4980,10 +5185,10 @@ class CandyS3Test {
                     candyS3.updateObjectRetention(bucket, objectKey1, new UpdateObjectRetentionOptions()
                             .retentionMode(ObjectRetentionMode.GOVERNANCE)
                             .retainUntilDate(closerDate));
-                    Assert.fail("Should not be here. Exception should be thrown when update retention in GOVERNANCE mode to a closer date without bypassGovernanceRetention");
+                    Assertions.fail("Should not be here. Exception should be thrown when update retention in GOVERNANCE mode to a closer date without bypassGovernanceRetention");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
 
                 candyS3.updateObjectRetention(bucket, objectKey1, new UpdateObjectRetentionOptions()
@@ -4992,57 +5197,59 @@ class CandyS3Test {
                         .bypassGovernanceRetention());
 
                 ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
+                Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.GOVERNANCE);
 
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .after(new Date(closerDate.getTime() - 1000)));
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .before(new Date(closerDate.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String closerDateStr = simpleDateFormat.format(closerDate);
                 String retainUntilDateStr = simpleDateFormat.format(objectLockProperties.getObjectLockRetainUntilDate());
-                Assert.assertEquals(closerDateStr, retainUntilDateStr);
+                Assertions.assertEquals(closerDateStr, retainUntilDateStr);
             }
 
             // Remove retention in GOVERNANCE mode is not permitted unless use bypassGovernanceRetention
             {
                 try {
                     candyS3.updateObjectRetention(bucket, objectKey1, new UpdateObjectRetentionOptions());
-                    Assert.fail("Should not be here. Exception should be thrown when remove retention in GOVERNANCE mode without bypassGovernanceRetention");
+                    Assertions.fail("Should not be here. Exception should be thrown when remove retention in GOVERNANCE mode without bypassGovernanceRetention");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
 
                 candyS3.updateObjectRetention(bucket, objectKey1, new UpdateObjectRetentionOptions().bypassGovernanceRetention());
 
                 try {
                     candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                    Assert.fail("Should not be here. Exception should be thrown when get retention on an object without retention");
+                    Assertions.fail("Should not be here. Exception should be thrown when get retention on an object without retention");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
-                    Assert.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
+                    Assertions.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
                 }
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void updateObjectCompliancePeriodTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void updateObjectCompliancePeriodTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("uOCPTest");
         try {
 
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
 
             // Enable object-lock when create bucket is not supported by Tencent cloud COS
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.enableBucketObjectLock(bucket, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder().buildWithoutRetention());
             }
 
@@ -5057,18 +5264,18 @@ class CandyS3Test {
 
             {
                 ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
 
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .after(new Date(retainDate.getTime() - 1000)));
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .before(new Date(retainDate.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String retainDateStr = simpleDateFormat.format(retainDate);
                 String retainUntilDateStr = simpleDateFormat.format(objectLockProperties.getObjectLockRetainUntilDate());
-                Assert.assertEquals(retainDateStr, retainUntilDateStr);
+                Assertions.assertEquals(retainDateStr, retainUntilDateStr);
             }
 
             // Update retention in COMPLIANCE mode to a later date is permitted
@@ -5078,18 +5285,18 @@ class CandyS3Test {
                         .retainUntilDate(laterDate));
 
                 ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
 
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .after(new Date(laterDate.getTime() - 1000)));
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .before(new Date(laterDate.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String laterDateStr = simpleDateFormat.format(laterDate);
                 String retainUntilDateStr = simpleDateFormat.format(objectLockProperties.getObjectLockRetainUntilDate());
-                Assert.assertEquals(laterDateStr, retainUntilDateStr);
+                Assertions.assertEquals(laterDateStr, retainUntilDateStr);
             }
 
             // Update retention in COMPLIANCE mode to a closer date is not permitted
@@ -5098,13 +5305,13 @@ class CandyS3Test {
                     candyS3.updateObjectRetention(bucket, objectKey1, new UpdateObjectRetentionOptions()
                             .retentionMode(ObjectRetentionMode.COMPLIANCE)
                             .retainUntilDate(closerDate));
-                    Assert.fail("Should not be here. Exception should be thrown when update retention in COMPLIANCE mode to a closer date");
+                    Assertions.fail("Should not be here. Exception should be thrown when update retention in COMPLIANCE mode to a closer date");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
-                        Assert.assertEquals("InvalidObjectLock", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
+                        Assertions.assertEquals("InvalidObjectLock", ((CandyS3Exception) ex).getParsedError().getCode());
                     } else {
-                        Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                        Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                     }
                 }
             }
@@ -5113,22 +5320,24 @@ class CandyS3Test {
             {
                 try {
                     candyS3.updateObjectRetention(bucket, objectKey1, new UpdateObjectRetentionOptions());
-                    Assert.fail("Should not be here. Exception should be thrown when remove retention in COMPLIANCE mode");
+                    Assertions.fail("Should not be here. Exception should be thrown when remove retention in COMPLIANCE mode");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
             }
 
-            Thread.sleep(30 * 1000);
+            Thread.sleep(35 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void updateObjectRetentionModeTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void updateObjectRetentionModeTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("updateObjectRetentionModeTest");
         try {
 
@@ -5151,18 +5360,18 @@ class CandyS3Test {
                         .bypassGovernanceRetention());
 
                 ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-                Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
 
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .after(new Date(laterDate.getTime() - 1000)));
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .before(new Date(laterDate.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String laterDateStr = simpleDateFormat.format(laterDate);
                 String retainUntilDateStr = simpleDateFormat.format(objectLockProperties.getObjectLockRetainUntilDate());
-                Assert.assertEquals(laterDateStr, retainUntilDateStr);
+                Assertions.assertEquals(laterDateStr, retainUntilDateStr);
             }
 
 
@@ -5177,10 +5386,10 @@ class CandyS3Test {
                     candyS3.updateObjectRetention(bucket, objectKey2, new UpdateObjectRetentionOptions()
                             .retentionMode(ObjectRetentionMode.COMPLIANCE)
                             .retainUntilDate(closerDate));
-                    Assert.fail("Should not be here. Exception should be thrown when update retention mode from GOVERNANCE to COMPLIANCE with a closer date unless use bypassGovernanceRetention");
+                    Assertions.fail("Should not be here. Exception should be thrown when update retention mode from GOVERNANCE to COMPLIANCE with a closer date unless use bypassGovernanceRetention");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
 
                 candyS3.updateObjectRetention(bucket, objectKey2, new UpdateObjectRetentionOptions()
@@ -5189,18 +5398,18 @@ class CandyS3Test {
                         .bypassGovernanceRetention());
 
                 ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey2, new GetObjectRetentionOptions());
-                Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+                Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
 
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .after(new Date(closerDate.getTime() - 1000)));
-                Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
+                Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate()
                         .before(new Date(closerDate.getTime() + 1000)));
 
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                 simpleDateFormat.setTimeZone(new SimpleTimeZone(0, "UTC"));
                 String closerDateStr = simpleDateFormat.format(closerDate);
                 String retainUntilDateStr = simpleDateFormat.format(objectLockProperties.getObjectLockRetainUntilDate());
-                Assert.assertEquals(closerDateStr, retainUntilDateStr);
+                Assertions.assertEquals(closerDateStr, retainUntilDateStr);
             }
 
             // Update retention mode from COMPLIANCE to GOVERNANCE is not permitted
@@ -5213,29 +5422,31 @@ class CandyS3Test {
                     candyS3.updateObjectRetention(bucket, objectKey3, new UpdateObjectRetentionOptions()
                             .retentionMode(ObjectRetentionMode.GOVERNANCE)
                             .retainUntilDate(laterDate));
-                    Assert.fail("Should not be here. Exception should be thrown when update retention mode from COMPLIANCE to GOVERNANCE");
+                    Assertions.fail("Should not be here. Exception should be thrown when update retention mode from COMPLIANCE to GOVERNANCE");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
             }
 
             Thread.sleep(30 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void multipartUploadObjectRetentionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void multipartUploadObjectRetentionTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("mpartRTest");
         try {
 
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
 
             // Enable object-lock when create bucket is not supported by Tencent cloud COS
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.enableBucketObjectLock(bucket, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder().buildWithoutRetention());
             }
 
@@ -5251,26 +5462,28 @@ class CandyS3Test {
                     new CompleteMultipartUploadOptions.CompleteMultipartUploadOptionsBuilder().build());
 
             ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey1, new GetObjectRetentionOptions());
-            Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
-            Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
-            Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
+            Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+            Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
+            Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
 
             Thread.sleep(10 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void copyObjectRetentionTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void copyObjectRetentionTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("copyObjectRetentionTest");
         try {
 
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
 
             // Enable object-lock when create bucket is not supported by Tencent cloud COS
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.enableBucketObjectLock(bucket, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder().buildWithoutRetention());
             }
 
@@ -5286,19 +5499,21 @@ class CandyS3Test {
 
 
             ObjectLockProperties objectLockProperties = candyS3.getObjectRetention(bucket, objectKey2, new GetObjectRetentionOptions());
-            Assert.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
-            Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
-            Assert.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
+            Assertions.assertEquals(objectLockProperties.getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+            Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().after(new Date(retainDate.getTime() - 1000)));
+            Assertions.assertTrue(objectLockProperties.getObjectLockRetainUntilDate().before(new Date(retainDate.getTime() + 1000)));
 
             Thread.sleep(10 * 1000);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void objectRetentionTimezoneTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void objectRetentionTimezoneTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("objectRetentionTimezoneTest");
         try {
 
@@ -5306,14 +5521,14 @@ class CandyS3Test {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
 
             // Enable object-lock when create bucket is not supported by Tencent cloud COS
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.enableBucketObjectLock(bucket, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder().buildWithoutRetention());
             }
 
             String objectKey1 = "objectKey1";
 
             TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"));
-            Assert.assertEquals("America/New_York", TimeZone.getDefault().getID());
+            Assertions.assertEquals("America/New_York", TimeZone.getDefault().getID());
 
             Date retainUntilDate = new Date(System.currentTimeMillis() + 1000 * 60);
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder()
@@ -5321,23 +5536,23 @@ class CandyS3Test {
                     .build());
 
             TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
-            Assert.assertEquals("Asia/Shanghai", TimeZone.getDefault().getID());
+            Assertions.assertEquals("Asia/Shanghai", TimeZone.getDefault().getID());
 
             Date retainUntilDate2 = new Date(System.currentTimeMillis() + 1000 * 60);
 
             S3Object s3Object = candyS3.getObjectMetadata(bucket, objectKey1, new DownloadObjectOptions.DownloadObjectOptionsBuilder()
                     .configureDataOutput().toBytes().endConfigureDataOutput()
                     .build());
-            Assert.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
+            Assertions.assertEquals(s3Object.getObjectLockConfiguration().getObjectLockMode(), ObjectRetentionMode.COMPLIANCE);
 
-            Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+            Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                     .after(new Date(retainUntilDate.getTime() - 2000)));
-            Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+            Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                     .before(new Date(retainUntilDate.getTime() + 2000)));
 
-            Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+            Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                     .after(new Date(retainUntilDate2.getTime() - 2000)));
-            Assert.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
+            Assertions.assertTrue(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate()
                     .before(new Date(retainUntilDate2.getTime() + 2000)));
 
             SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
@@ -5345,20 +5560,22 @@ class CandyS3Test {
             String twoDaysLaterStr1 = simpleDateFormat.format(retainUntilDate);
             String twoDaysLaterStr2 = simpleDateFormat.format(retainUntilDate);
             String retainUntilDateStr = simpleDateFormat.format(s3Object.getObjectLockConfiguration().getObjectLockRetainUntilDate());
-            Assert.assertEquals(twoDaysLaterStr1, retainUntilDateStr);
-            Assert.assertEquals(twoDaysLaterStr2, retainUntilDateStr);
+            Assertions.assertEquals(twoDaysLaterStr1, retainUntilDateStr);
+            Assertions.assertEquals(twoDaysLaterStr2, retainUntilDateStr);
 
             Thread.sleep(1000 * 60);
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
 
     }
 
 
-    void deleteRetainObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void deleteRetainObjectTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("deleteRetainObjectTest");
         try {
 
@@ -5375,11 +5592,11 @@ class CandyS3Test {
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1));
 
                 ListPaginationResult<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey1));
-                Assert.assertEquals(objects.getResults().size(), 0);
+                Assertions.assertEquals(objects.getResults().size(), 0);
 
                 ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
+                Assertions.assertEquals(objectVersions.getResults().size(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
 
                 // Delete deleteMarker to retain the object version for subsequent tests
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1).versionId(objectVersions.getDeleteMarkers().get(0).getVersionId()));
@@ -5388,25 +5605,25 @@ class CandyS3Test {
                 // Delete object with versionId is not permitted when the object is in governance mode and the retention period has not expired.
                 try {
                     candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1).versionId(objectVersions.getResults().get(0).getVersionId()));
-                    Assert.fail("Should not be here. Exception should be thrown when delete object version that is in governance mode and the retention period has not expired.");
+                    Assertions.fail("Should not be here. Exception should be thrown when delete object version that is in governance mode and the retention period has not expired.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
                 // Delete object with versionId is permitted when the object is in governance mode and the retention period has expired.
                 Thread.sleep(10 * 1000);
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1).versionId(objectVersions.getResults().get(0).getVersionId()));
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 0);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 0);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
             // Delete object with versionId is not permitted when the object is in governance mode and the retention period has not expired,
@@ -5425,10 +5642,10 @@ class CandyS3Test {
                         .bypassGovernanceRetention());
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 0);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 0);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
             // In compliance mode, a protected object version can't be overwritten or deleted by any user
@@ -5443,11 +5660,11 @@ class CandyS3Test {
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey3));
 
                 ListPaginationResult<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey3));
-                Assert.assertEquals(objects.getResults().size(), 0);
+                Assertions.assertEquals(objects.getResults().size(), 0);
 
                 ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
+                Assertions.assertEquals(objectVersions.getResults().size(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
 
                 // Delete deleteMarker to retain the object version for subsequent tests
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey3).versionId(objectVersions.getDeleteMarkers().get(0).getVersionId()));
@@ -5457,25 +5674,25 @@ class CandyS3Test {
                 // Delete object with versionId is not permitted when the object is in compliance mode and the retention period has not expired.
                 try {
                     candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey3).versionId(objectVersions.getResults().get(0).getVersionId()));
-                    Assert.fail("Should not be here. Exception should be thrown when delete object version that is in compliance mode and the retention period has not expired.");
+                    Assertions.fail("Should not be here. Exception should be thrown when delete object version that is in compliance mode and the retention period has not expired.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 1);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 1);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
                 // Delete object with versionId is permitted when the object is in compliance mode and the retention period has expired.
                 Thread.sleep(10 * 1000);
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey3).versionId(objectVersions.getResults().get(0).getVersionId()));
 
                 objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-                Assert.assertEquals(objectVersions.getResults().size(), 0);
-                Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+                Assertions.assertEquals(objectVersions.getResults().size(), 0);
+                Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
         } finally {
@@ -5484,8 +5701,10 @@ class CandyS3Test {
 
     }
 
-    void deleteLegalHoldObjectTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void deleteLegalHoldObjectTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("deleteLegalHoldObjectTest");
         try {
 
@@ -5500,11 +5719,11 @@ class CandyS3Test {
             candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1));
 
             ListPaginationResult<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions().prefix(objectKey1));
-            Assert.assertEquals(objects.getResults().size(), 0);
+            Assertions.assertEquals(objects.getResults().size(), 0);
 
             ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-            Assert.assertEquals(objectVersions.getResults().size(), 1);
-            Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
+            Assertions.assertEquals(objectVersions.getResults().size(), 1);
+            Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 1);
 
             // Delete deleteMarker to retain the object version for subsequent tests
             candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1).versionId(objectVersions.getDeleteMarkers().get(0).getVersionId()));
@@ -5513,28 +5732,30 @@ class CandyS3Test {
             // Delete object with versionId is not permitted when the object is in legal hold
             try {
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1).versionId(objectVersions.getResults().get(0).getVersionId()));
-                Assert.fail("Should not be here. Exception should be thrown when delete object version that is in legal hold.");
+                Assertions.fail("Should not be here. Exception should be thrown when delete object version that is in legal hold.");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals("AccessDenied", ((CandyS3Exception) ex).getParsedError().getCode());
             }
 
             objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
-            Assert.assertEquals(objectVersions.getResults().size(), 1);
-            Assert.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
+            Assertions.assertEquals(objectVersions.getResults().size(), 1);
+            Assertions.assertEquals(objectVersions.getDeleteMarkers().size(), 0);
 
             for (S3ObjectVersion item : objectVersions.getResults()) {
                 candyS3.updateObjectLegalHold(bucket, item.getKey(), new ObjectLegalHoldOptions().versionId(item.getVersionId()).legalHold(false));
             }
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void updateObjectLegalHoldTest(S3Provider provider) throws IOException, NoSuchAlgorithmException, InterruptedException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void updateObjectLegalHoldTest() throws IOException, NoSuchAlgorithmException, InterruptedException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("updateObjectLegalHoldTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
@@ -5543,10 +5764,10 @@ class CandyS3Test {
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder()
                     .configureObjectLockOptions().legalHold(true).endConfigureObjectLockOptions()
                     .build());
-            Assert.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()));
+            Assertions.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()));
 
             candyS3.updateObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions().legalHold(false));
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()));
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()));
 
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder()
                     .configureUploadData().withData(new byte[]{1}).endConfigureDataContent()
@@ -5554,44 +5775,44 @@ class CandyS3Test {
 
             try {
                 candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions());
-                Assert.fail("Should not be here. Exception should be thrown when check legal hold if object-lock is disabled");
+                Assertions.fail("Should not be here. Exception should be thrown when check legal hold if object-lock is disabled");
             } catch (Exception ex) {
-                Assert.assertTrue(ex instanceof CandyS3Exception);
-                Assert.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
-                Assert.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
+                Assertions.assertTrue(ex instanceof CandyS3Exception);
+                Assertions.assertEquals(((CandyS3Exception) ex).getCode(), CommonErrorCode.NO_SUCH_OBJECT_LOCK_CONFIGURATION.getCode());
+                Assertions.assertEquals(((CandyS3Exception) ex).getParsedError().getCode(), "NoSuchObjectLockConfiguration");
             }
 
             candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder()
                     .configureUploadData().withData(new byte[]{2}).endConfigureDataContent()
                     .configureObjectLockOptions().lockMode(ObjectRetentionMode.COMPLIANCE).retainUntilDate(new Date(System.currentTimeMillis() + 10 * 1000)).endConfigureObjectLockOptions()
                     .build());
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()));
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()));
 
             ListPaginationResult<S3ObjectVersion> objectVersions = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
 
             candyS3.updateObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions().legalHold(false).versionId(objectVersions.getResults().get(1).getVersionId()));
 
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(0).getVersionId())));
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(1).getVersionId())));
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(2).getVersionId())));
 
             candyS3.updateObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions().legalHold(true));
-            Assert.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(0).getVersionId())));
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(1).getVersionId())));
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(2).getVersionId())));
 
             candyS3.updateObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions().legalHold(true).versionId(objectVersions.getResults().get(2).getVersionId()));
-            Assert.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(0).getVersionId())));
-            Assert.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertFalse(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(1).getVersionId())));
-            Assert.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
+            Assertions.assertTrue(candyS3.isObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions()
                     .versionId(objectVersions.getResults().get(2).getVersionId())));
 
             candyS3.updateObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions().legalHold(false)
@@ -5604,13 +5825,15 @@ class CandyS3Test {
             Thread.sleep(1000 * 10);
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void deleteObjectsBatchTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.basic)
+    void deleteObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("deleteObjectsBatchTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -5622,7 +5845,7 @@ class CandyS3Test {
             candyS3.putObject(bucket, "key6/2", new PutObjectOptions.PutObjectOptionsBuilder().build());
 
             ListPaginationResult<S3Object> s3Objects = candyS3.listObjects(bucket, new ListObjectOptions());
-            Assert.assertEquals(s3Objects.getResults().size(), 6);
+            Assertions.assertEquals(s3Objects.getResults().size(), 6);
 
             DeleteObjectsBatchResult deleteObjectsBatchResult = candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
                     .addDeleteObject("key1")
@@ -5634,41 +5857,43 @@ class CandyS3Test {
             Set<String> deletedKeys = deleteObjectsBatchResult.getDeleted().stream()
                     .map(DeleteObjectsBatchResult.DeletedObject::getKey)
                     .collect(Collectors.toSet());
-            Assert.assertEquals(deletedKeys.size(), 4);
-            Assert.assertTrue(deletedKeys.contains("key1"));
-            Assert.assertTrue(deletedKeys.contains("key2"));
-            Assert.assertTrue(deletedKeys.contains("key3/1"));
-            Assert.assertTrue(deletedKeys.contains("key4"));
+            Assertions.assertEquals(deletedKeys.size(), 4);
+            Assertions.assertTrue(deletedKeys.contains("key1"));
+            Assertions.assertTrue(deletedKeys.contains("key2"));
+            Assertions.assertTrue(deletedKeys.contains("key3/1"));
+            Assertions.assertTrue(deletedKeys.contains("key4"));
 
             ListPaginationResult<S3Object> s3Objects2 = candyS3.listObjects(bucket, new ListObjectOptions());
-            Assert.assertEquals(s3Objects2.getResults().size(), 2);
+            Assertions.assertEquals(s3Objects2.getResults().size(), 2);
 
             deleteObjectsBatchResult = candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
                     .addDeleteObjects(Arrays.asList("key5", "key6/2"))
                     .build());
             ListPaginationResult<S3Object> s3Objects3 = candyS3.listObjects(bucket, new ListObjectOptions());
-            Assert.assertEquals(s3Objects3.getResults().size(), 0);
+            Assertions.assertEquals(s3Objects3.getResults().size(), 0);
 
             deletedKeys = deleteObjectsBatchResult.getDeleted().stream()
                     .map(DeleteObjectsBatchResult.DeletedObject::getKey)
                     .collect(Collectors.toSet());
-            Assert.assertEquals(deletedKeys.size(), 2);
-            Assert.assertTrue(deletedKeys.contains("key5"));
-            Assert.assertTrue(deletedKeys.contains("key6/2"));
+            Assertions.assertEquals(deletedKeys.size(), 2);
+            Assertions.assertTrue(deletedKeys.contains("key5"));
+            Assertions.assertTrue(deletedKeys.contains("key6/2"));
 
         } finally {
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void deleteVersioningObjectsBatchTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.versioning)
+    void deleteVersioningObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("dVOBatchTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
 
             // Tencent cloud COS and Aliyun OSS: enable object-lock when create bucket is not supported, and default versioning is false
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider) || S3Provider.ALIYUN_OSS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider()) || S3Provider.ALIYUN_OSS.equals(provider())) {
                 candyS3.setBucketVersioning(bucket, true);
             }
 
@@ -5686,10 +5911,10 @@ class CandyS3Test {
                         .addDeleteObject(objectKey1, deleteVersionId)
                         .build());
 
-                Assert.assertEquals(candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions()).getResults().size(), 1);
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getKey(), objectKey1);
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getVersionId(), deleteVersionId);
+                Assertions.assertEquals(candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions()).getResults().size(), 1);
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getKey(), objectKey1);
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getVersionId(), deleteVersionId);
             }
 
 
@@ -5698,20 +5923,22 @@ class CandyS3Test {
                         .addDeleteObject(objectKey1)
                         .build());
 
-                Assert.assertEquals(candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions()).getDeleteMarkers().size(), 1);
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getDeleteMarker(), true);
+                Assertions.assertEquals(candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions()).getDeleteMarkers().size(), 1);
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getDeleteMarker(), true);
             }
 
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void deleteObjectConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void deleteObjectConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("dOCTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -5721,12 +5948,12 @@ class CandyS3Test {
                 String objectKey1 = "objectKey1";
                 candyS3.putObject(bucket, objectKey1, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
-                Assert.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
+                Assertions.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
 
                 String etag = candyS3.getObjectMetadata(bucket, objectKey1, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build()).geteTag();
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey1)
                         .configureConditionalOptions().ifMatch(etag).endConfigure());
-                Assert.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 0);
+                Assertions.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 0);
             }
 
             // delete object with if-match use * to match any etag
@@ -5734,11 +5961,11 @@ class CandyS3Test {
                 String objectKey2 = "objectKey2";
                 candyS3.putObject(bucket, objectKey2, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
-                Assert.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
+                Assertions.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
 
                 candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey2)
                         .configureConditionalOptions().matchAny().endConfigure());
-                Assert.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 0);
+                Assertions.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 0);
             }
 
             // delete object with if-match not match etag, should throw PreconditionFailed
@@ -5746,28 +5973,30 @@ class CandyS3Test {
                 String objectKey3 = "objectKey3";
                 candyS3.putObject(bucket, objectKey3, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
-                Assert.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
+                Assertions.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
 
                 try {
                     candyS3.deleteObject(bucket, new DeleteObjectOptions(objectKey3)
                             .configureConditionalOptions().ifMatch("x").endConfigure());
-                    Assert.fail("Should not be here. PreconditionFailed should be thrown.");
+                    Assertions.fail("Should not be here. PreconditionFailed should be thrown.");
                 } catch (Exception ex) {
-                    Assert.assertTrue(ex instanceof CandyS3Exception);
-                    Assert.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
-                    Assert.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
+                    Assertions.assertTrue(ex instanceof CandyS3Exception);
+                    Assertions.assertEquals(CommonErrorCode.OBJECT_PRECONDITION_FAILED.getCode(), ((CandyS3Exception) ex).getCode());
+                    Assertions.assertEquals("PreconditionFailed", ((CandyS3Exception) ex).getParsedError().getCode());
                 }
-                Assert.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
+                Assertions.assertEquals(candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size(), 1);
             }
 
         } finally {
-            deleteAllObject(provider, bucket);
+            deleteAllObject(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void deleteObjectsBatchConditionalTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.conditional)
+    void deleteObjectsBatchConditionalTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("dOBCTest");
         try {
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).build());
@@ -5781,7 +6010,7 @@ class CandyS3Test {
                 candyS3.putObject(bucket, objectKey2, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
 
-                Assert.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
+                Assertions.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
 
                 String object1Etag = candyS3.getObjectMetadata(bucket, objectKey1, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build()).geteTag();
                 String object2Etag = candyS3.getObjectMetadata(bucket, objectKey2, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build()).geteTag();
@@ -5789,7 +6018,7 @@ class CandyS3Test {
                         .addConditionalDeleteObject(objectKey1, object1Etag)
                         .addConditionalDeleteObject(objectKey2, object2Etag)
                         .build());
-                Assert.assertEquals(0, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
+                Assertions.assertEquals(0, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
             }
 
             // delete object with all if-match use * to match any etag
@@ -5800,13 +6029,13 @@ class CandyS3Test {
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
                 candyS3.putObject(bucket, objectKey4, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
-                Assert.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
+                Assertions.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
 
                 candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
                         .addConditionalDeleteObject(objectKey3, "*")
                         .addConditionalDeleteObject(objectKey4, "*")
                         .build());
-                Assert.assertEquals(0, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
+                Assertions.assertEquals(0, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
             }
 
             // delete object with some if-match matches etag, will only delete these objects
@@ -5817,24 +6046,24 @@ class CandyS3Test {
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
                 candyS3.putObject(bucket, objectKey6, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
-                Assert.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
+                Assertions.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
 
                 String object5Etag = candyS3.getObjectMetadata(bucket, objectKey5, new DownloadObjectOptions.DownloadObjectOptionsBuilder().build()).geteTag();
                 DeleteObjectsBatchResult result = candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
                         .addConditionalDeleteObject(objectKey5, object5Etag)
                         .addConditionalDeleteObject(objectKey6, "x")
                         .build());
-                Assert.assertFalse(result.isSuccessful());
-                Assert.assertEquals(1, result.getDeleted().size());
-                Assert.assertEquals(objectKey5, result.getDeleted().get(0).getKey());
-                Assert.assertEquals(1, result.getErrors().size());
-                Assert.assertEquals(objectKey6, result.getErrors().get(0).getKey());
+                Assertions.assertFalse(result.isSuccessful());
+                Assertions.assertEquals(1, result.getDeleted().size());
+                Assertions.assertEquals(objectKey5, result.getDeleted().get(0).getKey());
+                Assertions.assertEquals(1, result.getErrors().size());
+                Assertions.assertEquals(objectKey6, result.getErrors().get(0).getKey());
 
                 List<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions()).getResults();
-                Assert.assertEquals(1, objects.size());
-                Assert.assertEquals(objectKey6, objects.get(0).getKey());
+                Assertions.assertEquals(1, objects.size());
+                Assertions.assertEquals(objectKey6, objects.get(0).getKey());
 
-                deleteAllObject(provider, bucket);
+                deleteAllObject(provider(), bucket);
             }
 
             // delete object with some if-match use * to match any etag and other if-match not matches etag, will only delete these objects
@@ -5845,31 +6074,33 @@ class CandyS3Test {
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
                 candyS3.putObject(bucket, objectKey8, new PutObjectOptions.PutObjectOptionsBuilder()
                         .configureUploadData().withData(new byte[]{1}).endConfigureDataContent().build());
-                Assert.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
+                Assertions.assertEquals(2, candyS3.listObjects(bucket, new ListObjectOptions()).getResults().size());
 
                 DeleteObjectsBatchResult result = candyS3.deleteObjectsBatch(bucket, new DeleteObjectsBatchOptions.DeleteObjectsBatchOptionsBuilder()
                         .addConditionalDeleteObject(objectKey7, "*")
                         .addConditionalDeleteObject(objectKey8, "x")
                         .build());
-                Assert.assertFalse(result.isSuccessful());
-                Assert.assertEquals(1, result.getDeleted().size());
-                Assert.assertEquals(objectKey7, result.getDeleted().get(0).getKey());
-                Assert.assertEquals(1, result.getErrors().size());
-                Assert.assertEquals(objectKey8, result.getErrors().get(0).getKey());
+                Assertions.assertFalse(result.isSuccessful());
+                Assertions.assertEquals(1, result.getDeleted().size());
+                Assertions.assertEquals(objectKey7, result.getDeleted().get(0).getKey());
+                Assertions.assertEquals(1, result.getErrors().size());
+                Assertions.assertEquals(objectKey8, result.getErrors().get(0).getKey());
 
                 List<S3Object> objects = candyS3.listObjects(bucket, new ListObjectOptions()).getResults();
-                Assert.assertEquals(1, objects.size());
-                Assert.assertEquals(objectKey8, objects.get(0).getKey());
+                Assertions.assertEquals(1, objects.size());
+                Assertions.assertEquals(objectKey8, objects.get(0).getKey());
             }
 
         } finally {
-            deleteAllObject(provider, bucket);
+            deleteAllObject(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
 
-    void deleteRetainObjectsBatchTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void deleteRetainObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("deleteRetainObjectsBatchTest");
         try {
 
@@ -5893,15 +6124,15 @@ class CandyS3Test {
                         .addDeleteObject(objectVersions.getResults().get(1).getKey(), objectVersions.getResults().get(1).getVersionId())
                         .build());
 
-                Assert.assertFalse(deleteObjectsBatchResult.isSuccessful());
+                Assertions.assertFalse(deleteObjectsBatchResult.isSuccessful());
 
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getKey(), objectKey2);
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getKey(), objectKey2);
 
-                Assert.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getKey(), objectKey1);
-                Assert.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getCode(), "AccessDenied");
+                Assertions.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getKey(), objectKey1);
+                Assertions.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getCode(), "AccessDenied");
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
             {
@@ -5920,11 +6151,11 @@ class CandyS3Test {
                         .bypassGovernanceRetention()
                         .build());
 
-                Assert.assertTrue(deleteObjectsBatchResult.isSuccessful());
-                Assert.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 2);
-                Assert.assertNull(deleteObjectsBatchResult.getErrors());
+                Assertions.assertTrue(deleteObjectsBatchResult.isSuccessful());
+                Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 2);
+                Assertions.assertNull(deleteObjectsBatchResult.getErrors());
 
-                deleteAllObjectVersions(provider, bucket);
+                deleteAllObjectVersions(provider(), bucket);
             }
 
         } finally {
@@ -5932,15 +6163,17 @@ class CandyS3Test {
         }
     }
 
-    void deleteLegalHoldObjectsBatchTest(S3Provider provider) throws IOException, NoSuchAlgorithmException {
-        CandyS3 candyS3 = init(provider);
+    @Test
+    @Tag(TestTag.objectRetention)
+    void deleteLegalHoldObjectsBatchTest() throws IOException, NoSuchAlgorithmException {
+        CandyS3 candyS3 = init(provider());
         String bucket = genTestBucketName("dLHOBatchTest");
         try {
 
             candyS3.createBucket(new CreateBucketOptions.CreateBucketOptionsBuilder(bucket).enableObjectLock().build());
 
             // Enable object-lock when create bucket is not supported by Tencent cloud COS
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
                 candyS3.enableBucketObjectLock(bucket, new UpdateBucketObjectLockOptions.UpdateBucketObjectLockOptionsBuilder().buildWithoutRetention());
             }
 
@@ -5960,23 +6193,23 @@ class CandyS3Test {
                     .addDeleteObject(objectVersions.getResults().get(1).getKey(), objectVersions.getResults().get(1).getVersionId())
                     .build());
 
-            Assert.assertFalse(deleteObjectsBatchResult.isSuccessful());
+            Assertions.assertFalse(deleteObjectsBatchResult.isSuccessful());
 
-            Assert.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
-            Assert.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getKey(), objectKey2);
+            Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().size(), 1);
+            Assertions.assertEquals(deleteObjectsBatchResult.getDeleted().get(0).getKey(), objectKey2);
 
-            Assert.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getKey(), objectKey1);
-            if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
-                Assert.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getCode(), "ObjectLocked");
+            Assertions.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getKey(), objectKey1);
+            if (S3Provider.TENCENTCLOUD_COS.equals(provider())) {
+                Assertions.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getCode(), "ObjectLocked");
             } else {
-                Assert.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getCode(), "AccessDenied");
+                Assertions.assertEquals(deleteObjectsBatchResult.getErrors().get(0).getCode(), "AccessDenied");
             }
 
             candyS3.updateObjectLegalHold(bucket, objectKey1, new ObjectLegalHoldOptions().legalHold(false));
 
 
         } finally {
-            deleteAllObjectVersions(provider, bucket);
+            deleteAllObjectVersions(provider(), bucket);
             candyS3.deleteBucket(bucket);
         }
     }
@@ -5987,7 +6220,7 @@ class CandyS3Test {
             return;
         }
 
-        CandyS3 candyS3 = init(provider);
+        CandyS3 candyS3 = init(provider());
 
         BucketObjectLockConfiguration bucketObjectLockConfiguration = null;
         try {
@@ -5995,6 +6228,7 @@ class CandyS3Test {
         } catch (Exception ex) {
         }
 
+        outer:
         while (true) {
             ListPaginationResult<S3ObjectVersion> result = candyS3.listObjectVersions(bucket, new ListObjectVersionsOptions());
             if (result.getResults().isEmpty() && result.getDeleteMarkers().isEmpty()) {
@@ -6004,7 +6238,7 @@ class CandyS3Test {
             for (S3ObjectVersion objectVersion : result.getResults()) {
                 try {
                     // TODO Aliyun OSS will retain the object after upload legal hold?
-                    if (!S3Provider.ALIYUN_OSS.equals(provider)) {
+                    if (!S3Provider.ALIYUN_OSS.equals(provider())) {
                         candyS3.updateObjectLegalHold(bucket, objectVersion.getKey(), new ObjectLegalHoldOptions().versionId(objectVersion.getVersionId()).legalHold(false));
                     }
                 } catch (Exception ex) {
@@ -6021,6 +6255,7 @@ class CandyS3Test {
                 } catch (Exception ex) {
                     System.out.println("delete object version:[" + objectVersion.getKey() + "]-[" + objectVersion.getVersionId() + "] error:");
                     ex.printStackTrace();
+                    break outer;
                 }
             }
             for (S3ObjectVersion deleteMarker : result.getDeleteMarkers()) {
@@ -6029,6 +6264,7 @@ class CandyS3Test {
                 } catch (Exception ex) {
                     System.out.println("delete object deleteMarker:[" + deleteMarker.getKey() + "]-[" + deleteMarker.getVersionId() + "] error:");
                     ex.printStackTrace();
+                    break outer;
                 }
             }
         }
@@ -6053,7 +6289,7 @@ class CandyS3Test {
             for (S3Object s3Object : result.getResults()) {
                 try {
                     // TODO Aliyun OSS will retain the object after upload legal hold?
-                    if (!S3Provider.ALIYUN_OSS.equals(provider)) {
+                    if (!S3Provider.ALIYUN_OSS.equals(provider())) {
                         candyS3.updateObjectLegalHold(bucket, s3Object.getKey(), new ObjectLegalHoldOptions().legalHold(false));
                     }
                 } catch (Exception ex) {
@@ -6112,11 +6348,11 @@ class CandyS3Test {
                         candyS3.setRegion(b.getBucketRegion());
                     }
 
-                    abortAllMultipartUploads(provider, b.getName());
-                    if (!S3Provider.CLOUDFLARE_R2.equals(provider)) {
-                        deleteAllObjectVersions(provider, b.getName());
+                    abortAllMultipartUploads(provider(), b.getName());
+                    if (!S3Provider.CLOUDFLARE_R2.equals(provider())) {
+                        deleteAllObjectVersions(provider(), b.getName());
                     } else {
-                        deleteAllObject(provider, b.getName());
+                        deleteAllObject(provider(), b.getName());
                     }
 
                     candyS3.deleteBucket(b.getName());
@@ -6147,7 +6383,6 @@ class CandyS3Test {
     }
 
 
-    @BeforeClass
     public static void mkTempFiles() {
         File tempDir = new File("./temp/");
         if (!tempDir.exists()) {
@@ -6155,7 +6390,6 @@ class CandyS3Test {
         }
     }
 
-    @AfterClass
     public static void cleanUpTempFiles() throws IOException {
         File tempDir = new File("./temp/");
         if (tempDir.exists() && tempDir.isDirectory()) {

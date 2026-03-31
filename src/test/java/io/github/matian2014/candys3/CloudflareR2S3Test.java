@@ -1,15 +1,15 @@
 package io.github.matian2014.candys3;
 
 /**
- * AWS provider test entry.
+ * Cloudflare R2 provider test entry.
  *
  * Actual test cases live in {@link CandyS3Test} and are inherited.
  */
-public class AwsS3Test extends CandyS3Test {
+public class CloudflareR2S3Test extends CandyS3Test {
 
     @Override
     protected S3Provider provider() {
-        return S3Provider.AWS;
+        return S3Provider.CLOUDFLARE_R2;
     }
 
     @Override

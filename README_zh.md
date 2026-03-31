@@ -113,25 +113,23 @@ S3Object object = client.getObject("my-bucket", "my-object", downloadOptions);
 client.deleteObject("my-bucket",new DeleteObjectOptions("my-object"));
 ```
 
-## 支持的功能列表
+## S3特性测试结果
 
-| 功能       | AWS S3 |
-|----------|--------|
-| 存储桶创建/删除 | ✅      |
-| 存储桶列举    | ✅      |
-| 对象上传/下载  | ✅      |
-| 分片上传     | ✅      |
-| 版本控制     | ✅      |
-| 对象锁定     | ✅      |
-| 条件写入     | ✅      |
-| 服务端加密    | ✅      |
-| 预签名URL   | ✅      |
-| 标签管理     | ✅      |
-| 访问策略     | ✅      |
+| 功能                                                         | AWS S3 | 阿里云OSS                                                    | 腾讯云COS                                                    |
+| ------------------------------------------------------------ | ------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 基本操作(存储桶创建/删除/列举/访问策略，对象上传/下载/分片上传/列举/删除/复制/预签名URL等) | ✅      | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> |
+| 版本控制                                                     | ✅      | ✅                                                            | ✅                                                            |
+| 对象锁定                                                     | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| 条件操作（条件写入/读取/复制/删除等）                        | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| 对象保留                                                     | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| 标签（存储桶标签、对象标签）                                 | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
+| 存储桶访问控制                                               | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> |
+| 存储桶地域（在指定地域创建桶、按地域筛选桶）                 | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
+| 服务端加密                                                   | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
 
 我们将持续跟踪AWS S3的更新资讯并添加新功能。
 
-对于其他云服务商，因为各自支持情况的差异，并不能保证所有操作均可用，你可以通过运行单元测试来确认（通常来说，核心的桶创建及删除、对象上传及下载功能是广泛支持的）。
+**对于其他云服务商，因为各自支持情况的差异，并不能保证所有操作均可用**，你可以通过运行单元测试来确认（通常来说，核心的桶创建及删除、对象上传及下载功能是广泛支持的）。
 
 ## 构建项目
 
@@ -153,6 +151,9 @@ mvn test -Dtest=AliyunOSSTest
 mvn test -Dtest=TencentcloudCosTest
 mvn test -Dtest=CloudflareR2Test
 mvn test -Dtest=CustomS3Test
+
+# 运行特定云服务商、分组的测试
+mvn test '-Dtest=AliyunOssS3Test,TencentCloudCosS3Test' '-Dgroups=basic'
 ```
 
 ## 贡献指南

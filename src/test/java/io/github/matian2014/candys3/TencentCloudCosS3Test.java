@@ -1,25 +1,25 @@
 package io.github.matian2014.candys3;
 
 /**
- * AWS provider test entry.
+ * Tencent Cloud COS provider test entry.
  *
  * Actual test cases live in {@link CandyS3Test} and are inherited.
  */
-public class AwsS3Test extends CandyS3Test {
+public class TencentCloudCosS3Test extends CandyS3Test {
 
     @Override
     protected S3Provider provider() {
-        return S3Provider.AWS;
+        return S3Provider.TENCENTCLOUD_COS;
     }
 
     @Override
     protected String bucketLocationOtherRegion() {
-        return "us-west-2";
+        return "ap-chengdu";
     }
 
     @Override
     protected String listBucketsFilterOtherRegion() {
-        return "us-west-2";
+        return "ap-chengdu";
     }
 }
 
