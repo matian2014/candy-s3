@@ -20,8 +20,6 @@ import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -46,56 +44,11 @@ abstract class CandyS3Test {
         System.out.println("removeTestsBucketAndCleanUp done.");
     }
 
-    private static String S3_ACCESSKEY;
-    private static String S3_SECRETKEY;
-    private static String S3_DEFAULT_REGION;
-    private static boolean S3_USE_SSL = true;
+    protected static String TENCENTCLOUD_COS_APPID;
 
-    private static String TENCENTCLOUD_COS_APPID;
+    protected abstract CandyS3 init(S3Provider provider) throws IOException;
 
-    private CandyS3 init(S3Provider provider) throws IOException {
-        CandyS3 candyS3 = new CandyS3(provider);
-
-        if (S3Provider.AWS.equals(provider)) {
-            Map<String, String> properties = readIni("aws.ini");
-            S3_ACCESSKEY = properties.get("access-key");
-            S3_SECRETKEY = properties.get("secret-key");
-            S3_DEFAULT_REGION = properties.get("default-region");
-        } else if (S3Provider.CLOUDFLARE_R2.equals(provider)) {
-            Map<String, String> properties = readIni("cloudflare_r2.ini");
-            S3_ACCESSKEY = properties.get("access-key");
-            S3_SECRETKEY = properties.get("secret-key");
-            S3_DEFAULT_REGION = properties.get("default-region");
-            candyS3.setCloudflareR2AccountId(properties.get("account-id"));
-        } else if (S3Provider.ALIYUN_OSS.equals(provider)) {
-            Map<String, String> properties = readIni("aliyun_oss.ini");
-            S3_DEFAULT_REGION = properties.get("default-region");
-            S3_ACCESSKEY = properties.get("access-key");
-            S3_SECRETKEY = properties.get("secret-key");
-        } else if (S3Provider.TENCENTCLOUD_COS.equals(provider)) {
-            Map<String, String> properties = readIni("tencentcloud_cos.ini");
-            S3_DEFAULT_REGION = properties.get("default-region");
-            S3_ACCESSKEY = properties.get("access-key");
-            S3_SECRETKEY = properties.get("secret-key");
-            TENCENTCLOUD_COS_APPID = properties.get("cos-app-id");
-        } else if (S3Provider.CUSTOM.equals(provider)) {
-            Map<String, String> properties = readIni("custom.ini");
-            S3_ACCESSKEY = properties.get("access-key");
-            S3_SECRETKEY = properties.get("secret-key");
-            S3_DEFAULT_REGION = properties.get("default-region");
-            S3_USE_SSL = Boolean.parseBoolean(properties.get("useSsl"));
-            candyS3.setCustomProviderDomain(properties.get("custom-provider-domain"));
-            candyS3.setCustomProviderUsePathStyle(Boolean.parseBoolean(properties.get("custom-provider-use-path-style")));
-        }
-
-        candyS3.setAccessKey(S3_ACCESSKEY);
-        candyS3.setSecretKey(S3_SECRETKEY);
-        candyS3.setRegion(S3_DEFAULT_REGION);
-        candyS3.setUseSSL(S3_USE_SSL);
-        return candyS3;
-    }
-
-    private Map<String, String> readIni(String resourceFile) throws IOException {
+    protected Map<String, String> readIni(String resourceFile) throws IOException {
         Map<String, String> properties = new HashMap<>();
 
         InputStream in = this.getClass().getClassLoader().getResourceAsStream(resourceFile);
