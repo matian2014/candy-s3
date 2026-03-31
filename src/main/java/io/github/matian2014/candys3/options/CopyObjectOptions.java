@@ -3,7 +3,7 @@ package io.github.matian2014.candys3.options;
 import io.github.matian2014.candys3.ObjectRetentionMode;
 import io.github.matian2014.candys3.ServerSideEncryptionAlgorithm;
 import io.github.matian2014.candys3.StorageClass;
-import org.apache.commons.lang3.StringUtils;
+import io.github.matian2014.candys3.util.StringUtils;
 
 import java.util.Date;
 import java.util.HashMap;

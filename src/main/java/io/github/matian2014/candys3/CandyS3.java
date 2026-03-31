@@ -11,10 +11,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import io.github.matian2014.candys3.options.*;
-import io.github.matian2014.candys3.signer.*;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.StringUtils;
+import io.github.matian2014.candys3.util.ArrayUtils;
+import io.github.matian2014.candys3.util.StringUtils;
 
 import java.io.*;
 import java.net.HttpURLConnection;
