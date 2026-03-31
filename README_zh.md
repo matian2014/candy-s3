@@ -115,17 +115,17 @@ client.deleteObject("my-bucket",new DeleteObjectOptions("my-object"));
 
 ## S3特性测试结果
 
-| 功能                                                         | AWS S3 | 阿里云OSS                                                    | 腾讯云COS                                                    |
-| ------------------------------------------------------------ | ------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 基本操作(存储桶创建/删除/列举/访问策略，对象上传/下载/分片上传/列举/删除/复制/预签名URL等) | ✅      | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_high.svg" style="zoom:15%;" /> |
-| 版本控制                                                     | ✅      | ✅                                                            | ✅                                                            |
-| 对象锁定                                                     | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| 条件操作（条件写入/读取/复制/删除等）                        | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| 对象保留                                                     | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| 标签（存储桶标签、对象标签）                                 | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
-| 存储桶访问控制                                               | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> |
-| 存储桶地域（在指定地域创建桶、按地域筛选桶）                 | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | <img src="C:\code\candy-s3\assets\progress_medium.svg" style="zoom:15%;" /> |
-| 服务端加密                                                   | ✅      | <img src="C:\code\candy-s3\assets\progress_low.svg" style="zoom:15%;" /> | ✅                                                            |
+| 功能                                                         | AWS S3 | 阿里云OSS | 腾讯云COS |
+| ------------------------------------------------------------ | ------ | --------- | --------- |
+| 基本操作(存储桶创建/删除/列举/访问策略，对象上传/下载/分片上传/列举/删除/复制/预签名URL等) | ✅      | 🌤         | 🌤         |
+| 版本控制                                                     | ✅      | 🔆         | 🔆         |
+| 对象锁定                                                     | ✅      | ⛈️         | 🌧️         |
+| 条件操作（条件写入/读取/复制/删除等）                        | ✅      | ⛈️         | 🌧️         |
+| 对象保留                                                     | ✅      | ⛈️         | 🌧️         |
+| 标签（存储桶标签、对象标签）                                 | ✅      | ⛈️         | 🔆         |
+| 存储桶访问控制                                               | ✅      | ⛈️         | ⛈️         |
+| 存储桶地域（在指定地域创建桶、按地域筛选桶）                 | ✅      | ⛈️         | 🌧️         |
+| 服务端加密                                                   | ✅      | ⛈️         | 🔆         |
 
 我们将持续跟踪AWS S3的更新资讯并添加新功能。
 
