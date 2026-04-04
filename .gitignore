@@ -32,3 +32,5 @@ target
 /src/test/resources/*.ini
 
 .cursor/
+CLAUDE.md
+.claude
