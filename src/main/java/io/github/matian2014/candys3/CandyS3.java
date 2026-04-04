@@ -3638,7 +3638,6 @@ public class CandyS3 {
                 }
                 return new Response(code, message, headers, new ResponseBody(bodyStream, connection));
             } catch (IOException ex) {
-                connection.disconnect();
                 throw ex;
             }
         }
@@ -3772,7 +3771,6 @@ public class CandyS3 {
             } finally {
                 inputStream.close();
                 inputStream = null;
-                connection.disconnect();
             }
         }
 
@@ -3785,7 +3783,7 @@ public class CandyS3 {
             }
             InputStream stream = inputStream;
             inputStream = null;
-            return new DisconnectInputStream(stream, connection);
+            return stream;
         }
 
         @Override
@@ -3796,25 +3794,6 @@ public class CandyS3 {
                 }
             } finally {
                 inputStream = null;
-                connection.disconnect();
-            }
-        }
-    }
-
-    private static class DisconnectInputStream extends FilterInputStream {
-        private final HttpURLConnection connection;
-
-        protected DisconnectInputStream(InputStream in, HttpURLConnection connection) {
-            super(in);
-            this.connection = connection;
-        }
-
-        @Override
-        public void close() throws IOException {
-            try {
-                super.close();
-            } finally {
-                connection.disconnect();
             }
         }
     }
