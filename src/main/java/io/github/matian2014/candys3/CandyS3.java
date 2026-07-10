@@ -183,9 +183,15 @@ public class CandyS3 {
             case TENCENTCLOUD_COS:
                 return String.format("http%s://%s%s%s", useSSL ? "s" : "", StringUtils.isEmpty(bucket) ? "" : bucket + ".",
                         useAccelerate ? "cos.accelerate" : "cos." + region, provider.getDomain());
+            case HUAWEICLOUD_OBS:
+                return String.format("http%s://%s%s%s", useSSL ? "s" : "", StringUtils.isEmpty(bucket) ? "" : bucket + ".",
+                        "obs." + region, provider.getDomain());
             case CUSTOM:
-                return String.format("http%s://%s/%s", useSSL ? "s" : "",
-                        customProviderDomain, StringUtils.isEmpty(bucket) ? "" : bucket);
+                return customProviderUsePathStyle
+                        ? String.format("http%s://%s/%s", useSSL ? "s" : "", customProviderDomain,
+                                StringUtils.isEmpty(bucket) ? "" : bucket)
+                        : String.format("http%s://%s%s", useSSL ? "s" : "", StringUtils.isEmpty(bucket) ? "" : bucket + ".",
+                                customProviderDomain);
             default:
                 throw new IllegalArgumentException("provider not supported.");
         }

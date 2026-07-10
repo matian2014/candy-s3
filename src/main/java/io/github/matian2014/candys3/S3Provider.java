@@ -6,6 +6,7 @@ public enum S3Provider {
     CLOUDFLARE_R2(".r2.cloudflarestorage.com"),
     ALIYUN_OSS(".aliyuncs.com"),
     TENCENTCLOUD_COS(".myqcloud.com"),
+    HUAWEICLOUD_OBS(".myhuaweicloud.com"),
     CUSTOM(""),
     ;
 
